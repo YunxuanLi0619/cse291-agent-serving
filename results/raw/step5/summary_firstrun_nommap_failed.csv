@@ -1,0 +1,20 @@
+== Mon Oct 19 13:40:22 PDT 2026 ==
+A_mmap,args=-np 4 -c 16384 --no-kv-unified,cold_start_s=10
+{"n_slots":4,"n_ctx":[4096,4096,4096,4096]}
+0.04.917.269 I llama_kv_cache:        CPU KV buffer size =  1792.00 MiB
+0.05.397.769 I llama_kv_cache: size = 1792.00 MiB (  4096 cells,  28 layers,  4/4 seqs), K (f16):  896.00 MiB, V (f16):  896.00 MiB
+A_mmap,idle_t0,rss_mb=4678,footprint_mb=3789
+A_mmap,idle_after_1req_20s,rss_mb=1786,footprint_mb=3795
+A_nommap: server died
+B_np8_c32k,args=-np 8 -c 32768 --no-kv-unified,cold_start_s=14
+{"n_slots":8,"n_ctx":[4096,4096,4096,4096,4096,4096,4096,4096]}
+0.03.897.400 I llama_kv_cache:        CPU KV buffer size =  3584.00 MiB
+0.05.208.248 I llama_kv_cache: size = 3584.00 MiB (  4096 cells,  28 layers,  8/8 seqs), K (f16): 1792.00 MiB, V (f16): 1792.00 MiB
+B_np8_c32k,idle_t0,rss_mb=2639,footprint_mb=5585
+B_np8_c32k,idle_after_1req_20s,rss_mb=3380,footprint_mb=5591
+C_kvu_np8,args=-np 8 -c 16384 -kvu,cold_start_s=6
+{"n_slots":8,"n_ctx":[16384,16384,16384,16384,16384,16384,16384,16384]}
+0.03.345.282 I llama_kv_cache:        CPU KV buffer size =  1792.00 MiB
+0.03.946.367 I llama_kv_cache: size = 1792.00 MiB ( 16384 cells,  28 layers,  8/1 seqs), K (f16):  896.00 MiB, V (f16):  896.00 MiB
+C_kvu_np8,idle_t0,rss_mb=5170,footprint_mb=3792
+C_kvu_np8,idle_after_1req_20s,rss_mb=3431,footprint_mb=3799
