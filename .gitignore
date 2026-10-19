@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.gguf
+server-startup.log
+results/raw/*.tmp
+.DS_Store
+# 课程发的 PDF 讲义不入库
+*.pdf

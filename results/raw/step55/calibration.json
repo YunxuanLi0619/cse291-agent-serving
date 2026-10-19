@@ -1,0 +1,505 @@
+{
+ "started": "2026-10-19 13:47:32",
+ "batt_start": "-InternalBattery-0 (id=22413411)\t55%; discharging; 3:34 remaining present: true",
+ "therm_start": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+ "n_slots": 4,
+ "n_ctx": [
+  4096,
+  4096,
+  4096,
+  4096
+ ],
+ "slot_keys": [
+  "id",
+  "is_processing",
+  "n_ctx",
+  "speculative"
+ ],
+ "A1_single_stream_3000in_256out": [
+  {
+   "prompt_n": 3034,
+   "cache_n": 0,
+   "prompt_per_second": 122.57862273261365,
+   "predicted_per_second": 16.410351984674403,
+   "ttft": 24.75447106361389,
+   "t_total": 40.293060064315796
+  },
+  {
+   "prompt_n": 3034,
+   "cache_n": 0,
+   "prompt_per_second": 112.3237809621113,
+   "predicted_per_second": 12.852518110710077,
+   "ttft": 27.021547079086304,
+   "t_total": 46.85540294647217
+  },
+  {
+   "prompt_n": 3035,
+   "cache_n": 0,
+   "prompt_per_second": 112.19763108102842,
+   "predicted_per_second": 16.344289968470903,
+   "ttft": 27.057562828063965,
+   "t_total": 42.657824993133545
+  }
+ ],
+ "A2_aggregate_256in_128out_x8": {
+  "1": {
+   "wall_s": 46.887304067611694,
+   "out_tokens": 1024,
+   "agg_tok_per_s": 21.839600726955588,
+   "per_req_dps_mean": 32.977445754055246,
+   "ttft_mean": 2.002059519290924
+  },
+  "2": {
+   "wall_s": 39.01424527168274,
+   "out_tokens": 1024,
+   "agg_tok_per_s": 26.246823253126934,
+   "per_req_dps_mean": 19.77622888487724,
+   "ttft_mean": 3.1929611265659332
+  },
+  "4": {
+   "wall_s": 31.2219181060791,
+   "out_tokens": 1024,
+   "agg_tok_per_s": 32.79747248458194,
+   "per_req_dps_mean": 14.969498808815775,
+   "ttft_mean": 6.543793976306915
+  }
+ },
+ "A3_T_solo": {
+  "short": {
+   "runs": [
+    {
+     "type": "short",
+     "t_solo": 4.036394834518433,
+     "idle": 0.0,
+     "prompt_tokens": [
+      290
+     ],
+     "cached": [
+      32
+     ],
+     "pps": [
+      127.99803141012157
+     ],
+     "dps": [
+      31.31548913799891
+     ],
+     "ttft": [
+      2.017005205154419
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "short",
+     "t_solo": 4.646958112716675,
+     "idle": 0.0,
+     "prompt_tokens": [
+      291
+     ],
+     "cached": [
+      32
+     ],
+     "pps": [
+      103.62097288491191
+     ],
+     "dps": [
+      29.43956874302855
+     ],
+     "ttft": [
+      2.5023131370544434
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "short",
+     "t_solo": 4.104922294616699,
+     "idle": 0.0,
+     "prompt_tokens": [
+      290
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      124.16232217925888
+     ],
+     "dps": [
+      31.619918541066998
+     ],
+     "ttft": [
+      2.095395803451538
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    }
+   ],
+   "t_solo_mean": 4.2627584139506025,
+   "t_solo_all": [
+    4.036394834518433,
+    4.646958112716675,
+    4.104922294616699
+   ]
+  },
+  "longctx": {
+   "runs": [
+    {
+     "type": "longctx",
+     "t_solo": 33.499459981918335,
+     "idle": 0.0,
+     "prompt_tokens": [
+      3035
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      104.3594429546454
+     ],
+     "dps": [
+      13.442572370648849
+     ],
+     "ttft": [
+      28.797923803329468
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "longctx",
+     "t_solo": 34.244866132736206,
+     "idle": 0.0,
+     "prompt_tokens": [
+      3035
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      101.62381669971836
+     ],
+     "dps": [
+      13.541368881934309
+     ],
+     "ttft": [
+      29.57343316078186
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "longctx",
+     "t_solo": 37.31745219230652,
+     "idle": 0.0,
+     "prompt_tokens": [
+      3035
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      90.75893984618277
+     ],
+     "dps": [
+      15.056274618801417
+     ],
+     "ttft": [
+      33.11241388320923
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    }
+   ],
+   "t_solo_mean": 35.02059276898702,
+   "t_solo_all": [
+    33.499459981918335,
+    34.244866132736206,
+    37.31745219230652
+   ]
+  },
+  "longgen": {
+   "runs": [
+    {
+     "type": "longgen",
+     "t_solo": 21.921443700790405,
+     "idle": 0.0,
+     "prompt_tokens": [
+      290
+     ],
+     "cached": [
+      32
+     ],
+     "pps": [
+      118.61065546638811
+     ],
+     "dps": [
+      25.891878958962028
+     ],
+     "ttft": [
+      2.1767868995666504
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "longgen",
+     "t_solo": 23.045154094696045,
+     "idle": 0.0,
+     "prompt_tokens": [
+      289
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      116.42218008848087
+     ],
+     "dps": [
+      24.55420306691126
+     ],
+     "ttft": [
+      2.226451873779297
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "longgen",
+     "t_solo": 22.658554077148438,
+     "idle": 0.0,
+     "prompt_tokens": [
+      290
+     ],
+     "cached": [
+      30
+     ],
+     "pps": [
+      113.67054428954162
+     ],
+     "dps": [
+      25.101378129518004
+     ],
+     "ttft": [
+      2.2888009548187256
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    }
+   ],
+   "t_solo_mean": 22.541717290878296,
+   "t_solo_all": [
+    21.921443700790405,
+    23.045154094696045,
+    22.658554077148438
+   ]
+  },
+  "agent": {
+   "runs": [
+    {
+     "type": "agent",
+     "t_solo": 35.52470898628235,
+     "idle": 3.0,
+     "prompt_tokens": [
+      835,
+      1123,
+      1411,
+      1698
+     ],
+     "cached": [
+      30,
+      962,
+      1250,
+      1538
+     ],
+     "pps": [
+      115.1957175240734,
+      125.32254988576967,
+      101.7393639709948,
+      102.07668638660651
+     ],
+     "dps": [
+      27.77270555355704,
+      25.12770612534333,
+      23.06211917994736,
+      21.493744135761936
+     ],
+     "ttft": [
+      6.9901511669158936,
+      1.2884607315063477,
+      1.5860750675201416,
+      1.5727150440216064
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "agent",
+     "t_solo": 34.3786301612854,
+     "idle": 3.0,
+     "prompt_tokens": [
+      835,
+      1122,
+      1410,
+      1697
+     ],
+     "cached": [
+      30,
+      962,
+      1249,
+      1537
+     ],
+     "pps": [
+      119.92093858319892,
+      124.28815898941298,
+      115.03722275850686,
+      110.9370016501879
+     ],
+     "dps": [
+      26.769117207209618,
+      26.179230017311273,
+      25.35887804336488,
+      21.601975271011238
+     ],
+     "ttft": [
+      6.714617013931274,
+      1.290158987045288,
+      1.4028592109680176,
+      1.446606159210205
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    },
+    {
+     "type": "agent",
+     "t_solo": 35.751770973205566,
+     "idle": 3.0,
+     "prompt_tokens": [
+      835,
+      1123,
+      1410,
+      1698
+     ],
+     "cached": [
+      30,
+      962,
+      1250,
+      1537
+     ],
+     "pps": [
+      107.77568786661307,
+      113.61463187095073,
+      117.76482364717658,
+      106.09149699714936
+     ],
+     "dps": [
+      25.7855454759565,
+      24.762634549334674,
+      23.836949260895032,
+      22.88448685862847
+     ],
+     "ttft": [
+      7.470871925354004,
+      1.4216129779815674,
+      1.36167311668396,
+      1.521437168121338
+     ],
+     "chunk_keys": [
+      "choices",
+      "created",
+      "id",
+      "model",
+      "object",
+      "system_fingerprint",
+      "timings"
+     ]
+    }
+   ],
+   "t_solo_mean": 35.218370040257774,
+   "t_solo_all": [
+    35.52470898628235,
+    34.3786301612854,
+    35.751770973205566
+   ]
+  }
+ },
+ "batt_end": "-InternalBattery-0 (id=22413411)\t49%; discharging; 1:19 remaining present: true",
+ "therm_end": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+ "ended": "2026-10-19 13:56:33"
+}

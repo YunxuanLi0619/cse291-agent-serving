@@ -1,0 +1,34 @@
+A1 [
+ {
+  "prompt_n": 3034,
+  "cache_n": 0,
+  "prompt_per_second": 122.57862273261365,
+  "predicted_per_second": 16.410351984674403,
+  "ttft": 24.75447106361389,
+  "t_total": 40.293060064315796
+ },
+ {
+  "prompt_n": 3034,
+  "cache_n": 0,
+  "prompt_per_second": 112.3237809621113,
+  "predicted_per_second": 12.852518110710077,
+  "ttft": 27.021547079086304,
+  "t_total": 46.85540294647217
+ },
+ {
+  "prompt_n": 3035,
+  "cache_n": 0,
+  "prompt_per_second": 112.19763108102842,
+  "predicted_per_second": 16.344289968470903,
+  "ttft": 27.057562828063965,
+  "t_total": 42.657824993133545
+ }
+]
+A2 c=1 {'wall_s': 46.887304067611694, 'out_tokens': 1024, 'agg_tok_per_s': 21.839600726955588, 'per_req_dps_mean': 32.977445754055246, 'ttft_mean': 2.002059519290924}
+A2 c=2 {'wall_s': 39.01424527168274, 'out_tokens': 1024, 'agg_tok_per_s': 26.246823253126934, 'per_req_dps_mean': 19.77622888487724, 'ttft_mean': 3.1929611265659332}
+A2 c=4 {'wall_s': 31.2219181060791, 'out_tokens': 1024, 'agg_tok_per_s': 32.79747248458194, 'per_req_dps_mean': 14.969498808815775, 'ttft_mean': 6.543793976306915}
+A3 short [4.04, 4.65, 4.1] prompt_tokens [290]
+A3 longctx [33.5, 34.24, 37.32] prompt_tokens [3035]
+A3 longgen [21.92, 23.05, 22.66] prompt_tokens [290]
+A3 agent [35.52, 34.38, 35.75] prompt_tokens [835, 1123, 1411, 1698]
+saved results/raw/step55/calibration.json
