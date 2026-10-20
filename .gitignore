@@ -6,3 +6,5 @@ results/raw/*.tmp
 .DS_Store
 # 课程发的 PDF 讲义不入库
 *.pdf
+.pytest_cache/
+.mypy_cache/

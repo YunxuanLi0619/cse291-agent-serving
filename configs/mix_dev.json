@@ -1,0 +1,5 @@
+{
+  "profile": "dev",
+  "seeds": [1, 2, 3, 4, 5],
+  "mix": {"short": 0.4, "longctx": 0.2, "longgen": 0.2, "agent": 0.2}
+}

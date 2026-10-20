@@ -1,0 +1,5 @@
+{
+  "profile": "eval",
+  "seeds": [101, 102, 103, 104, 105],
+  "mix": {"short": 0.3, "longctx": 0.3, "longgen": 0.1, "agent": 0.3}
+}
