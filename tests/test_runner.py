@@ -260,3 +260,74 @@ def test_failures_are_classified_and_never_drop_a_task(tmp_path, workload, fake_
     bad_reqs = [r for r in requests if r["task_id"] == bad["task_id"]]
     assert len(bad_reqs) == 1 and bad_reqs[0]["error_type"] == error_type and bad_reqs[0]["status"] == status
     assert len([r for r in requests if r["task_id"] == good["task_id"]]) == len(good["steps"])
+
+
+def agent_task(workload, delay_s, n_steps=3, **overrides):
+    task = only(workload["tasks"], type_="agent")[0]
+    task = {**task, "steps": [dict(s) for s in task["steps"][:n_steps]], **overrides}
+    for step in task["steps"][:-1]:
+        step["delay_after_s"] = delay_s
+    task["steps"][-1]["delay_after_s"] = None
+    return task
+
+
+def test_each_step_logs_prompt_tokens_of_the_context_it_actually_sent(tmp_path, workload, fake_server, tokenizer):
+    task = agent_task(workload, 0.02, n_steps=4)
+
+    requests, _ = run(tmp_path, {**workload, "tasks": [{**task, "unit_gap_s": 0.0}]}, fake_server)
+
+    logged = [r["prompt_tokens"] for r in sorted(requests, key=lambda r: r["step"])]
+    assert logged == [tokenizer.prompt_tokens(b["messages"]) for b in fake_server.requests]
+    assert logged == sorted(set(logged))  # 上下文逐步增长
+    contents = [m["content"] for m in fake_server.requests[-1]["messages"]]
+    assert contents[0] == task["steps"][0]["user_content"] and contents[2] == task["steps"][1]["user_content"]
+    assert contents[1] == task["needle"] + "." * 127  # 前一步的真实输出
+
+
+def test_tool_delay_releases_the_slot_and_continuation_requeues_behind_ready_steps(tmp_path, workload, fake_server):
+    fake_server.fault = lambda body, n: {"kind": "slow", "ttft_s": 0.5} if n == 2 else None  # n=2 是 B 的请求
+    a = agent_task(workload, 0.1, n_steps=2, unit_gap_s=0.0)
+    b = {**only(workload["tasks"], type_="short")[0], "unit_gap_s": 0.05}
+    wl = {**workload, "tasks": [a, b]}
+
+    requests, tasks = run(tmp_path, wl, fake_server, c=1, lam=1.0)
+
+    a1, a2 = (next(r for r in requests if r["task_id"] == a["task_id"] and r["step"] == k) for k in (1, 2))
+    b1 = next(r for r in requests if r["task_id"] == b["task_id"])
+    assert b1["t_start"] == pytest.approx(a1["t_end"], abs=0.05)  # B 在 A 的 Tool delay 里拿到名额
+    assert a2["t_submit"] == pytest.approx(a1["t_end"] + 0.1, abs=0.05)  # delay 结束 = 续步就绪
+    assert b1["t_end"] > a2["t_submit"]  # 此时 B 还占着名额,续步在队尾等
+    assert a2["t_start"] == pytest.approx(b1["t_end"], abs=0.05)
+    assert next(t for t in tasks if t["task_id"] == a["task_id"])["queue_time_total"] > 0.3
+
+
+def test_continuation_is_dispatched_right_after_delay_when_nothing_else_is_queued(tmp_path, workload, fake_server):
+    a = agent_task(workload, 0.3, n_steps=3, unit_gap_s=0.0)
+
+    requests, tasks = run(tmp_path, {**workload, "tasks": [a]}, fake_server, c=1)
+
+    r = sorted(requests, key=lambda r: r["step"])
+    for prev, nxt in zip(r, r[1:]):
+        assert nxt["t_submit"] - prev["t_end"] == pytest.approx(0.3, abs=0.05)  # 只隔 Tool delay
+        assert nxt["t_start"] - nxt["t_submit"] < 0.05  # 没有排队之外的耽误,也没有排队
+    assert tasks[0]["idle_time_total"] == pytest.approx(0.6) and tasks[0]["queue_time_total"] < 0.1
+
+
+def test_ctx_exceeded_at_a_later_step_fails_the_whole_task_and_stops_remaining_steps(tmp_path, workload, fake_server):
+    fake_server.fault = lambda body, n: {"kind": "ctx_exceeded"} if len(body["messages"]) >= 3 else None
+    a = agent_task(workload, 0.02, n_steps=4, unit_gap_s=0.0)
+
+    requests, tasks = run(tmp_path, {**workload, "tasks": [a]}, fake_server)
+
+    assert (tasks[0]["status"], tasks[0]["quality_pass"]) == ("error_ctx_exceeded", False)
+    assert [(r["step"], r["status"]) for r in requests] == [(1, "ok"), (2, "error_ctx_exceeded")]
+    assert len(fake_server.requests) == 2  # 第 3、4 步不再发出
+    assert tasks[0]["idle_time_total"] == pytest.approx(0.02)  # 失败之后不再等 Tool delay
+
+
+def test_quality_pass_requires_the_needle_in_the_final_output(tmp_path, workload, fake_server):
+    wrong = agent_task(workload, 0.02, unit_gap_s=0.0, needle="KEY-zzzzzzzz")  # 模型复述的是别的 key
+
+    _, tasks = run(tmp_path, {**workload, "tasks": [wrong]}, fake_server)
+
+    assert (tasks[0]["status"], tasks[0]["quality_pass"]) == ("ok", False)
