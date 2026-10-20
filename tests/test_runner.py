@@ -264,6 +264,7 @@ def test_failures_are_classified_and_never_drop_a_task(tmp_path, workload, fake_
 
 def agent_task(workload, delay_s, n_steps=3, **overrides):
     task = only(workload["tasks"], type_="agent")[0]
+    assert len(task["steps"]) >= n_steps
     task = {**task, "steps": [dict(s) for s in task["steps"][:n_steps]], **overrides}
     for step in task["steps"][:-1]:
         step["delay_after_s"] = delay_s
@@ -286,18 +287,21 @@ def test_each_step_logs_prompt_tokens_of_the_context_it_actually_sent(tmp_path, 
 
 def test_tool_delay_releases_the_slot_and_continuation_requeues_behind_ready_steps(tmp_path, workload, fake_server):
     fake_server.fault = lambda body, n: {"kind": "slow", "ttft_s": 0.5} if n == 2 else None  # n=2 是 B 的请求
-    a = agent_task(workload, 0.1, n_steps=2, unit_gap_s=0.0)
-    b = {**only(workload["tasks"], type_="short")[0], "unit_gap_s": 0.05}
-    wl = {**workload, "tasks": [a, b]}
+    a = agent_task(workload, 0.2, n_steps=2, unit_gap_s=0.0)
+    b, c = (dict(t, unit_gap_s=g) for t, g in zip(only(workload["tasks"], type_="short", n=2), (0.05, 0.2)))
+    wl = {**workload, "tasks": [a, b, c]}  # C 在 A 的续步就绪之前入队(0.25 s < 约 0.4 s)
 
     requests, tasks = run(tmp_path, wl, fake_server, c=1, lam=1.0)
 
-    a1, a2 = (next(r for r in requests if r["task_id"] == a["task_id"] and r["step"] == k) for k in (1, 2))
-    b1 = next(r for r in requests if r["task_id"] == b["task_id"])
+    def req(task, step=1):
+        return next(r for r in requests if r["task_id"] == task["task_id"] and r["step"] == step)
+
+    a1, a2, b1, c1 = req(a), req(a, 2), req(b), req(c)
     assert b1["t_start"] == pytest.approx(a1["t_end"], abs=0.05)  # B 在 A 的 Tool delay 里拿到名额
-    assert a2["t_submit"] == pytest.approx(a1["t_end"] + 0.1, abs=0.05)  # delay 结束 = 续步就绪
-    assert b1["t_end"] > a2["t_submit"]  # 此时 B 还占着名额,续步在队尾等
-    assert a2["t_start"] == pytest.approx(b1["t_end"], abs=0.05)
+    assert a2["t_submit"] == pytest.approx(a1["t_end"] + 0.2, abs=0.05)  # delay 结束 = 续步就绪
+    assert c1["t_submit"] < a2["t_submit"] < b1["t_end"]  # 续步就绪时 C 已在排队,B 还占着名额
+    assert c1["t_start"] == pytest.approx(b1["t_end"], abs=0.05)  # 队尾:C 先于续步
+    assert a2["t_start"] == pytest.approx(c1["t_end"], abs=0.05)
     assert next(t for t in tasks if t["task_id"] == a["task_id"])["queue_time_total"] > 0.3
 
 
