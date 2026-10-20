@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -348,3 +349,31 @@ def test_quality_pass_judges_only_the_final_step_output(tmp_path, workload, fake
 
     assert (forgot_at_end[0]["status"], forgot_at_end[0]["quality_pass"]) == ("ok", False)
     assert (recalled_at_end[0]["status"], recalled_at_end[0]["quality_pass"]) == ("ok", True)
+
+
+def test_run_writes_system_log_and_manifest_next_to_the_other_logs(tmp_path, workload, fake_server):
+    fake_server.ttft_s = 0.8  # 让至少一次 0.5 s 采样落在请求在飞期间
+    i = first_index(workload, "short")
+    wl = with_warmup_prefix(workload, i)
+
+    run(tmp_path, wl, fake_server, c=1, name="sys")
+    out = tmp_path / "sys"
+
+    system = jsonl(out / "system.jsonl")
+    assert len(system) >= 2
+    # 假 server 的 /metrics 与 /slots 都可读;没给 --server-pid,所以只有内存这一路报错(不静默)
+    assert all(r["error"] is None or r["error"].startswith("memory:") for r in system)
+    assert all("metrics" not in (r["error"] or "") and "slots" not in (r["error"] or "") for r in system)
+    assert all(len(r["slots"]) == fake_server.n_slots for r in system)
+    assert any(r["requests_processing"] == 1 and r["slots"][0]["is_processing"] for r in system)
+    # 在飞时 live_tokens 至少是该 Task 第 1 步的 prompt 估计;在飞 Request 只有 c=1 个
+    in_flight = [r for r in system if r["requests_processing"] == 1]
+    assert max(r["live_tokens"] for r in in_flight) >= min(t["prompt_tokens_measured"] for t in wl["tasks"])
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert (manifest["c"], manifest["lambda"], manifest["seed"]) == (1, 1000.0, wl["seed"])
+    assert manifest["workload_sha256"] == hashlib.sha256((tmp_path / "sys.json").read_bytes()).hexdigest()
+    assert manifest["repo_git_sha"]
+    assert manifest["memory_platform"] == system[0]["platform"]
+    assert manifest["t_end"] >= manifest["t_start"]
+    assert manifest["t_start_iso"] and manifest["t_end_iso"]

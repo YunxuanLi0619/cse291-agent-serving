@@ -35,6 +35,7 @@ class FakeServer:
         self.ttft_s, self.chunk_interval_s, self.n_slots = ttft_s, chunk_interval_s, n_slots
         self.fault = None
         self.max_in_flight = 0
+        self.deferred = 0  # /metrics 里报告的 requests_deferred,测试直接赋值
         self.aborted = 0  # 客户端中途断开、写回时才发现的请求数
         self._in_flight = 0
         self._lock = threading.Lock()
@@ -75,7 +76,18 @@ class FakeServer:
                     ready = time.monotonic() >= server.ready_at
                     self._json(200 if ready else 503, {"status": "ok" if ready else "loading model"})
                 elif self.path == "/slots":
-                    self._json(200, [{"id": i, "is_processing": False} for i in range(server.n_slots)])
+                    busy = server._in_flight
+                    self._json(200, [{"id": i, "is_processing": i < busy} for i in range(server.n_slots)])
+                elif self.path == "/metrics":
+                    body = (f"# TYPE llamacpp:requests_processing gauge\n"
+                            f"llamacpp:requests_processing {server._in_flight}\n"
+                            f"# TYPE llamacpp:requests_deferred gauge\n"
+                            f"llamacpp:requests_deferred {server.deferred}\n").encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
                 else:
                     self._json(404, {})
 

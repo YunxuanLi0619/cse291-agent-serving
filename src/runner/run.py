@@ -1,20 +1,26 @@
 """Runner:读 Workload,按开环 Poisson 到达、FIFO 队列 + 并发上限 c 对 llama-server 执行,
-写 requests.jsonl 与 tasks.jsonl。每个提交的 Task 恰好一行 Task 日志,不论成败。
+写 requests.jsonl、tasks.jsonl、system.jsonl(独立线程每 0.5 s 采样)与 manifest.json。
+每个提交的 Task 恰好一行 Task 日志,不论成败。
 
 用法: python -m src.runner.run --workload workloads/dev/default_s1.json --base-url http://127.0.0.1:8080 \
-        --out results/raw/run_x --c 4 --lambda 0.05 --policy fifo
+        --out results/raw/run_x --c 4 --lambda 0.05 --policy fifo --server-pid <llama-server pid>
 """
 import argparse
 import asyncio
 import json
+import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 import httpx
 
 from .client import RequestFailed, StreamResult, stream_chat
+from .gen_workload import TOOL_RESULT_TOKENS  # 续步 prompt 估计 = 上一步完整上下文 + 新 tool 文本
 from .logs import JsonlWriter
+from .manifest import collect_manifest
+from .monitor import SystemSampler, default_probe
 from .scheduler import POLICIES, ReadyStep, Scheduler
 
 WARMUP_TASKS = 3  # 每次 Run 最先到达的 3 个 Task 标 warmup
@@ -22,6 +28,7 @@ REQUEST_TIMEOUT_S = 120
 TASK_TIMEOUT_CAP_S = 300
 TASK_TIMEOUT_SOLO_FACTOR = 10  # 任务级超时 = min(300, 10 × T_solo),T_solo = deadline_s / 5
 DEADLINE_SOLO_FACTOR = 5
+REPO_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def task_timeout_s(task: dict) -> float:
@@ -34,6 +41,11 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
         self.sched, self.client, self.now = sched, client, now
         self.requests_log, self.tasks_log = requests_log, tasks_log
         self.request_timeout_s = request_timeout_s
+        self._in_flight: dict[int, tuple[int, StreamResult]] = {}  # 在飞 Request → (prompt 估计, 流结果)
+
+    def live_tokens(self) -> int:
+        """在飞 Request 占用的 token 估计 = 各自的 prompt 估计 + 已收到的输出 chunk 数(runner 没有 tokenizer)。"""
+        return sum(prompt + res.n_pieces for prompt, res in list(self._in_flight.values()))
 
     async def run_task(self, task: dict, t_arrive: float, warmup: bool) -> None:
         await asyncio.sleep(max(0.0, t_arrive - self.now()))  # 开环:到达与系统状态无关
@@ -41,6 +53,7 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
         queue_time = idle_time = 0.0
         t_first_dispatch = None
         messages: list[dict] = []
+        prompt_est = task["prompt_tokens_measured"]
         try:
             async with asyncio.timeout(t_arrive + task_timeout_s(task) - self.now()):
                 for k, step in enumerate(task["steps"], start=1):
@@ -49,7 +62,11 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
                     try:
                         await entry.granted.wait()  # 排队中任务级超时 → 取消 → finally 把它移出队列
                         t_first_dispatch = t_first_dispatch if t_first_dispatch is not None else entry.started_at
-                        output = await self._request(task, k, step, messages, entry, warmup)
+                        res = await self._request(task, k, step, messages, entry, warmup, prompt_est)
+                        output = res.text
+                        if res.timings:  # 下一步 prompt ≈ 本步完整上下文 + 新的 tool 文本
+                            prompt_est = (res.timings.get("prompt_n", 0) + res.timings.get("cache_n", 0)
+                                          + res.timings.get("predicted_n", 0) + TOOL_RESULT_TOKENS)
                     finally:
                         queue_time += entry.queue_time(self.now())
                         self.sched.finish(entry)
@@ -74,8 +91,9 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
             })
 
     async def _request(self, task: dict, k: int, step: dict, messages: list[dict], entry: ReadyStep,
-                       warmup: bool) -> str:
+                       warmup: bool, prompt_est: int) -> StreamResult:
         res = StreamResult()
+        self._in_flight[id(entry)] = (prompt_est, res)
         status, error_type = "ok", ""
         try:
             async with asyncio.timeout(self.request_timeout_s):
@@ -88,6 +106,7 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
             status, error_type = "timeout", "task_timeout"
             raise
         finally:
+            self._in_flight.pop(id(entry), None)
             timings = res.timings or {}
             self.requests_log.write({
                 "task_id": task["task_id"], "step": k, "t_submit": entry.ready_at, "t_start": entry.started_at,
@@ -98,7 +117,7 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
             })
         if status != "ok":
             raise RequestFailed(status, error_type)
-        return res.text
+        return res
 
 
 def check_slots(base_url: str, c: int) -> None:
@@ -113,9 +132,26 @@ def check_slots(base_url: str, c: int) -> None:
         raise SystemExit(f"/slots reports {n_slots} slots < c={c} (ADR 0003); refusing to run")
 
 
-async def run_all(a, tasks: list[dict]) -> None:
+def write_manifest(out: Path, manifest: dict) -> None:
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n")
+
+
+def stamp(manifest: dict, key: str) -> None:
+    t = time.time()
+    manifest[f"t_{key}"], manifest[f"t_{key}_iso"] = t, datetime.fromtimestamp(t, timezone.utc).isoformat()
+
+
+async def run_all(a, workload: dict) -> None:
+    tasks = workload["tasks"][:a.n_tasks]
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    manifest = collect_manifest(repo_dir=REPO_DIR, llama_cpp_dir=Path(a.llama_cpp_dir), server_pid=a.server_pid,
+                                workload_path=Path(a.workload), seed=workload.get("seed"), c=a.c, lam=a.lam,
+                                timeout_s=a.timeout)
+    probe = default_probe()
+    manifest["memory_platform"] = probe.platform if probe else None  # 与 system.jsonl 的平台标签对得上
+    stamp(manifest, "start")
+    write_manifest(out, manifest)  # Run 中途崩了也留下起点信息;结束时覆盖补上 t_end
     t0 = time.monotonic()
     now = lambda: time.monotonic() - t0  # noqa: E731
     arrivals, t = [], 0.0
@@ -123,14 +159,23 @@ async def run_all(a, tasks: list[dict]) -> None:
         t += task["unit_gap_s"] / a.lam
         arrivals.append(t)
     requests_log, tasks_log = JsonlWriter(out / "requests.jsonl"), JsonlWriter(out / "tasks.jsonl")
+    system_log = JsonlWriter(out / "system.jsonl")
+    sampler = None
     try:
         async with httpx.AsyncClient(base_url=a.base_url, timeout=None) as client:
             executor = Executor(Scheduler(POLICIES[a.policy](), a.c, now), client, requests_log, tasks_log, now, a.timeout)
+            sampler = SystemSampler(probe, a.server_pid, a.base_url, executor.live_tokens, system_log, now)
+            sampler.start()
             await asyncio.gather(*(executor.run_task(task, arrivals[i], i < WARMUP_TASKS)
                                    for i, task in enumerate(tasks)))
     finally:
+        if sampler is not None:
+            sampler.stop()
         requests_log.close()
         tasks_log.close()
+        system_log.close()
+        stamp(manifest, "end")
+        write_manifest(out, manifest)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -142,11 +187,14 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--lambda", dest="lam", type=float, required=True, help="Task 到达率 (个/秒)")
     ap.add_argument("--policy", choices=sorted(POLICIES), default="fifo")
     ap.add_argument("--n-tasks", type=int, help="只提交 Workload 的前 N 个 Task(默认全部)")
+    ap.add_argument("--server-pid", type=int, help="llama-server 进程号;用于内存采样和 manifest 里的启动命令行")
+    ap.add_argument("--llama-cpp-dir", default=os.environ.get("LLAMA_CPP_DIR", str(Path.home() / "src/llama.cpp")),
+                    help="llama.cpp 源码目录,manifest 记录其 commit")
     ap.add_argument("--timeout", type=float, default=REQUEST_TIMEOUT_S, help="请求级超时(秒)")
     a = ap.parse_args(argv)
-    tasks = json.loads(Path(a.workload).read_text())["tasks"][:a.n_tasks]
+    workload = json.loads(Path(a.workload).read_text())
     check_slots(a.base_url, a.c)
-    asyncio.run(run_all(a, tasks))
+    asyncio.run(run_all(a, workload))
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ class StreamResult:
     text: str = ""
     t_first_token: float | None = None
     t_end: float | None = None
+    n_pieces: int = 0  # 已收到的非空内容 chunk 数,≈ 已生成 token 数
     timings: dict | None = None
 
 
@@ -67,6 +68,7 @@ async def stream_chat(client: httpx.AsyncClient, messages: list[dict], max_token
                     if out.t_first_token is None:
                         out.t_first_token = now()
                     pieces.append(piece)
+                    out.n_pieces += 1
                 if "timings" in chunk:  # 在 finish_reason 那个 chunk 上,[DONE] 之前
                     out.timings = chunk["timings"]
     except httpx.HTTPError as e:  # 连接失败、读到一半被断开等
