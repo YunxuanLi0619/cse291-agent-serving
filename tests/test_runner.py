@@ -335,3 +335,16 @@ def test_quality_pass_requires_the_needle_in_the_final_output(tmp_path, workload
     _, tasks = run(tmp_path, {**workload, "tasks": [wrong]}, fake_server)
 
     assert (tasks[0]["status"], tasks[0]["quality_pass"]) == ("ok", False)
+
+
+def test_quality_pass_judges_only_the_final_step_output(tmp_path, workload, fake_server):
+    a = agent_task(workload, 0.02, n_steps=3, unit_gap_s=0.0)
+    last_turn = lambda body: len(body["messages"]) == 5  # 第 3 步的请求带 5 条消息
+
+    fake_server.fault = lambda body, n: {"kind": "no_key"} if last_turn(body) else None  # 前两步含 key,末步不含
+    _, forgot_at_end = run(tmp_path, {**workload, "tasks": [a]}, fake_server, name="forgot")
+    fake_server.fault = lambda body, n: None if last_turn(body) else {"kind": "no_key"}  # 前两步不含,末步含
+    _, recalled_at_end = run(tmp_path, {**workload, "tasks": [a]}, fake_server, name="recalled")
+
+    assert (forgot_at_end[0]["status"], forgot_at_end[0]["quality_pass"]) == ("ok", False)
+    assert (recalled_at_end[0]["status"], recalled_at_end[0]["quality_pass"]) == ("ok", True)

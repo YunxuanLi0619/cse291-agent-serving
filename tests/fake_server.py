@@ -8,6 +8,7 @@
   {"kind": "disconnect", "after_chunks": 3} 发完若干数据 chunk 后直接断开,不发 [DONE]
   {"kind": "stream_pool_exhausted", "after_chunks": 3}  已发过 chunk 后池耗尽:HTTP 200 + SSE error 事件
   {"kind": "garbage", "after_chunks": 3}    发完若干数据 chunk 后发一行坏 JSON
+  {"kind": "no_key"}                        正常完成,但回答里不含 key(模拟模型没复述出来)
 """
 import json
 import re
@@ -108,7 +109,8 @@ class FakeServer:
                 messages, max_tokens = body["messages"], body["max_tokens"]
                 text = "\n".join(m["content"] for m in messages)
                 found = NEEDLE_RE.search(text)  # 回答 = 对话里出现的第一个 key
-                pieces = [found.group(0) if found else "unknown"] + ["."] * (max_tokens - 1)
+                answer = found.group(0) if found and fault.get("kind") != "no_key" else "unknown"
+                pieces = [answer] + ["."] * (max_tokens - 1)
                 time.sleep(fault.get("ttft_s", server.ttft_s))
                 self._send({"choices": [{"finish_reason": None, "index": 0, "delta": {"role": "assistant", "content": None}}]})
                 for i, p in enumerate(pieces):
