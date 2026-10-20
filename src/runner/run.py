@@ -1,53 +1,136 @@
-"""Runner:读 Workload,对 llama-server 执行 Task,写 requests.jsonl 与 tasks.jsonl。
+"""Runner:读 Workload,按开环 Poisson 到达、FIFO 队列 + 并发上限 c 对 llama-server 执行,
+写 requests.jsonl 与 tasks.jsonl。每个提交的 Task 恰好一行 Task 日志,不论成败。
 
 用法: python -m src.runner.run --workload workloads/dev/default_s1.json --base-url http://127.0.0.1:8080 \
-        --out results/raw/run_x --task-index 0
+        --out results/raw/run_x --c 4 --lambda 0.05 --policy fifo
 """
 import argparse
+import asyncio
 import json
 import time
 from pathlib import Path
+from typing import Callable
 
 import httpx
 
-from .client import stream_chat
+from .client import RequestFailed, StreamResult, stream_chat
 from .logs import JsonlWriter
+from .scheduler import POLICIES, ReadyStep, Scheduler
 
 WARMUP_TASKS = 3  # 每次 Run 最先到达的 3 个 Task 标 warmup
+REQUEST_TIMEOUT_S = 120
+TASK_TIMEOUT_CAP_S = 300
+TASK_TIMEOUT_SOLO_FACTOR = 10  # 任务级超时 = min(300, 10 × T_solo),T_solo = deadline_s / 5
+DEADLINE_SOLO_FACTOR = 5
 
 
-def run_task(task: dict, warmup: bool, client: httpx.Client, requests_log: JsonlWriter,
-             tasks_log: JsonlWriter, now) -> None:
-    t_arrive = now()
-    messages, queue_time, idle_time = [], 0.0, 0.0
-    t_first_dispatch = None
-    output = ""
-    for k, step in enumerate(task["steps"], start=1):
-        messages.append({"role": "user", "content": step["user_content"]})
-        t_submit = now()
-        t_start = now()
-        t_first_dispatch = t_first_dispatch if t_first_dispatch is not None else t_start
-        queue_time += t_start - t_submit
-        res = stream_chat(client, messages, step["max_tokens"], now)
-        output = res.text
-        timings = res.timings or {}
-        requests_log.write({
-            "task_id": task["task_id"], "step": k, "t_submit": t_submit, "t_start": t_start,
-            "t_first_token": res.t_first_token, "t_end": res.t_end,
-            "prompt_tokens": timings.get("prompt_n", 0) + timings.get("cache_n", 0),
-            "cached_tokens": timings.get("cache_n", 0), "output_tokens": timings.get("predicted_n", 0),
-            "status": "ok", "error_type": None, "warmup": warmup, "id_slot": None,
-        })
-        messages.append({"role": "assistant", "content": res.text})
-        if step["delay_after_s"] is not None:
-            time.sleep(step["delay_after_s"])
-            idle_time += step["delay_after_s"]
-    tasks_log.write({
-        "task_id": task["task_id"], "type": task["type"], "t_arrive": t_arrive,
-        "t_first_dispatch": t_first_dispatch, "t_done": now(), "queue_time_total": queue_time,
-        "idle_time_total": idle_time, "n_steps": len(task["steps"]), "status": "ok",
-        "quality_pass": task["needle"] in output, "deadline_s": task["deadline_s"], "warmup": warmup,
-    })
+def task_timeout_s(task: dict) -> float:
+    return min(TASK_TIMEOUT_CAP_S, TASK_TIMEOUT_SOLO_FACTOR * task["deadline_s"] / DEADLINE_SOLO_FACTOR)
+
+
+class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是执行器
+    def __init__(self, sched: Scheduler, client: httpx.AsyncClient, requests_log: JsonlWriter,
+                 tasks_log: JsonlWriter, now: Callable[[], float], request_timeout_s: float):
+        self.sched, self.client, self.now = sched, client, now
+        self.requests_log, self.tasks_log = requests_log, tasks_log
+        self.request_timeout_s = request_timeout_s
+
+    async def run_task(self, task: dict, t_arrive: float, warmup: bool) -> None:
+        await asyncio.sleep(max(0.0, t_arrive - self.now()))  # 开环:到达与系统状态无关
+        status, output = "error_other", ""
+        queue_time = idle_time = 0.0
+        t_first_dispatch = None
+        messages: list[dict] = []
+        try:
+            async with asyncio.timeout(t_arrive + task_timeout_s(task) - self.now()):
+                for k, step in enumerate(task["steps"], start=1):
+                    messages.append({"role": "user", "content": step["user_content"]})
+                    entry = self.sched.submit(task["task_id"], k)
+                    try:
+                        await entry.granted.wait()  # 排队中任务级超时 → 取消 → finally 把它移出队列
+                        t_first_dispatch = t_first_dispatch if t_first_dispatch is not None else entry.started_at
+                        output = await self._request(task, k, step, messages, entry, warmup)
+                    finally:
+                        queue_time += entry.queue_time(self.now())
+                        self.sched.finish(entry)
+                    messages.append({"role": "assistant", "content": output})
+                    if step["delay_after_s"] is not None:  # Tool delay 不占并发名额
+                        await asyncio.sleep(step["delay_after_s"])
+                        idle_time += step["delay_after_s"]
+            status = "ok"
+        except TimeoutError:
+            status = "timeout"
+        except RequestFailed as e:
+            status = e.status
+        except Exception:  # 意料之外的错误也归 error_other,不能拖垮其它 Task
+            status = "error_other"
+        finally:  # 含被外部取消:每个 Task 仍恰好一行
+            self.tasks_log.write({
+                "task_id": task["task_id"], "type": task["type"], "t_arrive": t_arrive,
+                "t_first_dispatch": t_first_dispatch, "t_done": self.now(), "queue_time_total": queue_time,
+                "idle_time_total": idle_time, "n_steps": len(task["steps"]), "status": status,
+                "quality_pass": status == "ok" and task["needle"] in output,
+                "deadline_s": task["deadline_s"], "warmup": warmup,
+            })
+
+    async def _request(self, task: dict, k: int, step: dict, messages: list[dict], entry: ReadyStep,
+                       warmup: bool) -> str:
+        res = StreamResult()
+        status, error_type = "ok", ""
+        try:
+            async with asyncio.timeout(self.request_timeout_s):
+                await stream_chat(self.client, messages, step["max_tokens"], self.now, res)
+        except TimeoutError:
+            status, error_type = "timeout", "request_timeout"
+        except RequestFailed as e:
+            status, error_type = e.status, e.error_type
+        except asyncio.CancelledError:  # 任务级超时打断了在飞 Request
+            status, error_type = "timeout", "task_timeout"
+            raise
+        finally:
+            timings = res.timings or {}
+            self.requests_log.write({
+                "task_id": task["task_id"], "step": k, "t_submit": entry.ready_at, "t_start": entry.started_at,
+                "t_first_token": res.t_first_token, "t_end": res.t_end if res.t_end is not None else self.now(),
+                "prompt_tokens": timings.get("prompt_n", 0) + timings.get("cache_n", 0) if timings else None,
+                "cached_tokens": timings.get("cache_n"), "output_tokens": timings.get("predicted_n"),
+                "status": status, "error_type": error_type or None, "warmup": warmup, "id_slot": None,
+            })
+        if status != "ok":
+            raise RequestFailed(status, error_type)
+        return res.text
+
+
+def check_slots(base_url: str, c: int) -> None:
+    """ADR 0003:c ≤ np,否则多出的请求会在 server 内部排队,我们的 FIFO 就失效。"""
+    try:
+        r = httpx.get(f"{base_url}/slots", timeout=10)
+        r.raise_for_status()
+        n_slots = len(r.json())
+    except (httpx.HTTPError, ValueError) as e:
+        raise SystemExit(f"cannot read /slots from {base_url} ({e}); refusing to run") from e
+    if n_slots < c:
+        raise SystemExit(f"/slots reports {n_slots} slots < c={c} (ADR 0003); refusing to run")
+
+
+async def run_all(a, tasks: list[dict]) -> None:
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
+    now = lambda: time.monotonic() - t0  # noqa: E731
+    arrivals, t = [], 0.0
+    for task in tasks:  # 到达时刻 = 单位间隔 / λ 的累积和
+        t += task["unit_gap_s"] / a.lam
+        arrivals.append(t)
+    requests_log, tasks_log = JsonlWriter(out / "requests.jsonl"), JsonlWriter(out / "tasks.jsonl")
+    try:
+        async with httpx.AsyncClient(base_url=a.base_url, timeout=None) as client:
+            executor = Executor(Scheduler(POLICIES[a.policy](), a.c, now), client, requests_log, tasks_log, now, a.timeout)
+            await asyncio.gather(*(executor.run_task(task, arrivals[i], i < WARMUP_TASKS)
+                                   for i, task in enumerate(tasks)))
+    finally:
+        requests_log.close()
+        tasks_log.close()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -55,20 +138,15 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--workload", required=True)
     ap.add_argument("--base-url", default="http://127.0.0.1:8080")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--task-index", type=int, default=0, help="执行 Workload 里的第几个 Task")
+    ap.add_argument("--c", type=int, required=True, help="并发上限(在飞 Request 数)")
+    ap.add_argument("--lambda", dest="lam", type=float, required=True, help="Task 到达率 (个/秒)")
+    ap.add_argument("--policy", choices=sorted(POLICIES), default="fifo")
+    ap.add_argument("--n-tasks", type=int, help="只提交 Workload 的前 N 个 Task(默认全部)")
+    ap.add_argument("--timeout", type=float, default=REQUEST_TIMEOUT_S, help="请求级超时(秒)")
     a = ap.parse_args(argv)
-    task = json.loads(Path(a.workload).read_text())["tasks"][a.task_index]
-    out = Path(a.out)
-    out.mkdir(parents=True, exist_ok=True)
-    t0 = time.monotonic()
-    requests_log, tasks_log = JsonlWriter(out / "requests.jsonl"), JsonlWriter(out / "tasks.jsonl")
-    try:
-        with httpx.Client(base_url=a.base_url) as client:
-            run_task(task, a.task_index < WARMUP_TASKS, client, requests_log, tasks_log,
-                     lambda: time.monotonic() - t0)
-    finally:
-        requests_log.close()
-        tasks_log.close()
+    tasks = json.loads(Path(a.workload).read_text())["tasks"][:a.n_tasks]
+    check_slots(a.base_url, a.c)
+    asyncio.run(run_all(a, tasks))
 
 
 if __name__ == "__main__":

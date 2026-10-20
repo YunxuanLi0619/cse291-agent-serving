@@ -8,7 +8,7 @@
 .venv/bin/python -m pytest          # 全部测试(不需要真的 llama-server)
 ```
 
-## 流水线(当前已有:Workload 生成 + 单 Task runner)
+## 流水线(当前已有:Workload 生成 + runner:FIFO、并发上限、开环 Poisson、超时/失败落盘)
 
 ```bash
 scripts/start_server.sh 4 16384 --no-kv-unified    # 终端 A:启动 llama-server(参数集中在脚本里)
@@ -18,8 +18,10 @@ scripts/wait_health.sh                              # 轮询 /health,成功时�
 python -m src.runner.gen_workload --mix configs/mix_dev.json --t-solo configs/t_solo.json \
   --seed 1 --n-tasks 100 --out workloads/dev/default_s1.json
 
-# 执行 Workload 里的一个 Task,写 requests.jsonl 与 tasks.jsonl
-python -m src.runner.run --workload workloads/dev/default_s1.json --task-index 5 --out results/raw/try1
+# 执行 Workload:并发上限 c=4、到达率 λ=0.05 个/秒、FIFO,写 requests.jsonl 与 tasks.jsonl
+# (启动前校验 /slots 条数 ≥ c;--timeout 覆盖请求级超时,默认 120 s;--n-tasks 只提交前 N 个)
+python -m src.runner.run --workload workloads/dev/default_s1.json --c 4 --lambda 0.05 \
+  --policy fifo --out results/raw/try1
 ```
 
 - `configs/mix_dev.json` 与 `mix_eval.json`:种子范围(1–5 / 101–105)与混合比例各不相同;种子不在所属范围内会拒绝生成。
