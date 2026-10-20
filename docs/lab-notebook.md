@@ -119,3 +119,19 @@
 - 系列 S(B=16384 固定,np=c,c∈{1,2,4,8},每 slot 容量 = 16384/c):c=8 → 2048 token/slot,3035-token 的 longctx 必然超限(确定性失败,是被测现象);c=4 → 4096 刚好容纳 agent 末步 1698+128。
 - 系列 U(`-kvu -np 8 -c 16384`,c∈{4,8}):观察池耗尽时的行为(defer/报错/截断)。注意 `-kvu` 下 /slots 对每个 slot 都报 n_ctx=16384(池容量)。
 - 时间紧时先做 S,再做 U 的 c∈{4,8}(与上面预算一致)。
+
+### 2026-10-19 #3 补充 — prefill 期间断连的 slot 释放耗时(真机)
+配置 `-np 1 -c 4096`(`scripts/start_server.sh 1 4096`),单 slot 所以不用归因。prompt = longctx 3000 token(每次加随机前缀,避免整段命中 slot 里的 KV)。脚本 `scripts/measure_slot_release.py`,原始数据 `results/raw/slot_release/`。断连 = 客户端关闭流式连接;释放 = `/slots` 的 `is_processing` 回到 false(50 ms 轮询)。
+| 断连时刻(发出后) | 断连 → 释放 | 发出 → 释放 |
+|---|---|---|
+| prefill 1 s(4 次) | 16.3 / 17.9 / 18.0 / 18.6 s | 约 17–19 s |
+| prefill 5 s | 31.8 s | 36.8 s |
+| prefill 10 s | 22.1 s | 32.1 s |
+| prefill 15 s | 11.8 s | 26.8 s |
+| prefill 20 s | 7.9 s | 27.9 s |
+| prefill 24 s | 6.6 s | 30.6 s |
+| decode(首个 token 后 1 s) | 0.11 s | — |
+- **decode 期间断连:** 立即释放(0.11 s),与 Step 4 测试 7 一致。上面"超时主动断连 ≈0.7 s 释放 slot ✓"**只对 decode 阶段成立**。
+- **prefill 期间断连:** slot 一直忙到 prefill 结束。1 s 断连时 server 当场记 `cancel task`,但要等第一个 2048-token 批处理结束才 `release`(`n_tokens ≈ 2078`),约 17–19 s;5–24 s 断连时 `cancel task` 要等整个 prompt 处理完才出现(`release` 时 `n_tokens ≈ 3022`),发出→释放 ≈ 27–37 s ≈ 完整 prefill 时间。
+- **没弄清的:** 为什么 1 s 断连被立刻发现而 ≥5 s 的要等到 prefill 结束才被发现(只有现象,没验证机制)。样本很少(单个 prompt、每个时刻 1 次,1 s 重复 4 次),且在电池供电下测。
+- **对 runner 的影响:** 长 prompt(longctx)超时断连后,server 的 slot 可能还被占 10–30 s,而 runner 在断连瞬间就释放了自己的并发名额,下一个请求可能撞上 server 内部排队(ADR 0003 担心的情况)。runner 目前不检测这一点。

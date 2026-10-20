@@ -1,0 +1,7 @@
+{"spec": "prefill:1", "disconnect_after_send_s": 1.003, "first_token_s": null, "ended_naturally": false, "release_s": 16.271}
+{"spec": "prefill:5", "disconnect_after_send_s": 5.004, "first_token_s": null, "ended_naturally": false, "release_s": 31.814}
+{"spec": "prefill:10", "disconnect_after_send_s": 10.027, "first_token_s": null, "ended_naturally": false, "release_s": 22.078}
+{"spec": "prefill:15", "disconnect_after_send_s": 15.007, "first_token_s": null, "ended_naturally": false, "release_s": 11.841}
+{"spec": "prefill:20", "disconnect_after_send_s": 20.002, "first_token_s": null, "ended_naturally": false, "release_s": 7.85}
+{"spec": "prefill:24", "disconnect_after_send_s": 24.002, "first_token_s": null, "ended_naturally": false, "release_s": 6.619}
+{"spec": "decode:1", "disconnect_after_send_s": 33.01, "first_token_s": 32.008, "ended_naturally": false, "release_s": 0.11}
