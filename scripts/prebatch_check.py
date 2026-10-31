@@ -188,6 +188,8 @@ def main():
     p = sub.add_parser("c8"); p.add_argument("--reps", type=int, default=2)
     sub.add_parser("cold")
     a = ap.parse_args()
+    # 插电也会空闲睡眠:第一轮对比里睡了 644 s 和 900 s,正好落在请求中间。随本进程退出而结束。
+    subprocess.Popen(["caffeinate", "-is", "-w", str(os.getpid())])
     {"threads": phase_threads, "freeze": phase_freeze, "tsolo": phase_tsolo, "c8": phase_c8, "cold": phase_cold}[a.phase](a)
 
 

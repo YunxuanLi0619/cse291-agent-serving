@@ -1,0 +1,196 @@
+{
+ "rounds": [
+  {
+   "threads": 8,
+   "env_start": {
+    "time": "2026-10-30 21:17:08",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t91%; charging; 0:39 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "773.5 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  8.3 claude\n  5.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer"
+   },
+   "short_s": [
+    3.1120121479034424,
+    3.060492753982544,
+    3.069415807723999
+   ],
+   "longctx_s": [
+    25.37434720993042,
+    26.776190280914307,
+    26.167370080947876
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 25.79757785797119,
+    "agg_tok_per_s": 39.69364897889413
+   },
+   "env_end": {
+    "time": "2026-10-30 21:19:01",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t91%; charging; 0:46 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "793.3 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  1.4 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe\n  1.1 /usr/libexec/PerfPowerServices"
+   }
+  },
+  {
+   "threads": 4,
+   "env_start": {
+    "time": "2026-10-30 21:22:08",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t92%; charging; 0:35 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "398.2 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n 66.9 /usr/libexec/frauddefensed\n 25.8 /System/Library/PrivateFrameworks/GenerativeExperiencesRuntime.framework/Versions/A/generativeexperiencesd"
+   },
+   "short_s": [
+    3.960855007171631,
+    3.9901978969573975,
+    4.0630269050598145
+   ],
+   "longctx_s": [
+    33.434311866760254,
+    35.05003809928894,
+    35.126222133636475
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 32.975733041763306,
+    "agg_tok_per_s": 31.053138339733593
+   },
+   "env_end": {
+    "time": "2026-10-30 21:24:37",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t92%; charging; 0:41 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "398.8 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  2.4 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer\n  2.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe"
+   }
+  },
+  {
+   "threads": 10,
+   "env_start": {
+    "time": "2026-10-30 21:27:44",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t94%; charging; 0:32 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "975.9 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  4.0 /System/Library/Frameworks/CoreSpotlight.framework/spotlightknowledged\n  3.7 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd"
+   },
+   "short_s": [
+    3.1042768955230713,
+    3.029132127761841,
+    3.072545051574707
+   ],
+   "longctx_s": [
+    25.11048722267151,
+    26.01944589614868,
+    25.871346712112427
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 27.89925503730774,
+    "agg_tok_per_s": 36.70348898673731
+   },
+   "env_end": {
+    "time": "2026-10-30 21:29:38",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t94%; charging; 0:35 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "894.0 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n 14.9 /usr/libexec/routined\n 12.5 /System/Library/Frameworks/CoreSpotlight.framework/spotlightknowledged"
+   }
+  },
+  {
+   "threads": 8,
+   "env_start": {
+    "time": "2026-10-30 21:32:45",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t95%; charging; (no estimate) present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "800.0 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  2.2 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe\n  1.1 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe"
+   },
+   "short_s": [
+    647.255243062973,
+    3.5856409072875977,
+    3.331634998321533
+   ],
+   "longctx_s": [
+    26.452545166015625,
+    26.59745693206787,
+    26.266479969024658
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 25.170061111450195,
+    "agg_tok_per_s": 40.68325442142724
+   },
+   "env_end": {
+    "time": "2026-10-30 21:45:24",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t98%; charging; 0:41 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "796.9 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  1.2 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe\n  1.2 .venv/bin/python"
+   }
+  },
+  {
+   "threads": 4,
+   "env_start": {
+    "time": "2026-10-30 21:48:32",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t99%; finishing charge; 0:28 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "400.2 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  1.9 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe\n  1.7 /Applications/WeChat.app/Contents/MacOS/WeChat"
+   },
+   "short_s": [
+    3.9043540954589844,
+    3.9715168476104736,
+    4.069044828414917
+   ],
+   "longctx_s": [
+    33.653581857681274,
+    34.61743474006653,
+    35.338751792907715
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 33.415674924850464,
+    "agg_tok_per_s": 30.644300984579992
+   },
+   "env_end": {
+    "time": "2026-10-30 21:51:01",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t99%; finishing charge; 0:24 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "398.1 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  1.3 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe\n  1.2 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer"
+   }
+  },
+  {
+   "threads": 10,
+   "env_start": {
+    "time": "2026-10-30 21:54:08",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t99%; finishing charge; 0:18 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "983.1 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  3.7 /System/Applications/Mail.app/Contents/MacOS/Mail\n  1.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/155.0.8059.86/Helpe"
+   },
+   "short_s": [
+    2.9347987174987793,
+    3.0567691326141357,
+    3.001708984375
+   ],
+   "longctx_s": [
+    24.32628107070923,
+    24.57409405708313,
+    24.974217414855957
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 1003.0616998672485,
+    "agg_tok_per_s": 1.0208743890186642
+   },
+   "env_end": {
+    "time": "2026-10-30 22:12:14",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t100%; finishing charge; (no estimate) present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+    "top_cpu": "828.8 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  6.0 /usr/libexec/duetexpertd\n  5.8 /usr/libexec/mobileassetd"
+   }
+  }
+ ]
+}
