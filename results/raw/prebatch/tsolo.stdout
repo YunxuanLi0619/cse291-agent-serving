@@ -1,0 +1,34 @@
+saved /Users/yunxuanli/CSE 291/results/raw/prebatch/tsolo.json
+{
+ "new": {
+  "short": 3.19,
+  "longctx": 26.38,
+  "longgen": 15.95,
+  "agent_per_step_s": 6.2
+ },
+ "comparison": {
+  "deviation": {
+   "short": -0.2581395348837209,
+   "longctx": -0.24628571428571433,
+   "longgen": -0.2911111111111111,
+   "agent_per_step_s": -0.2298136645962734
+  },
+  "exceeded": [
+   "short",
+   "longctx",
+   "longgen",
+   "agent_per_step_s"
+  ],
+  "recalibrate": true
+ },
+ "budget_new": {
+  "mean_service_s": 15.302,
+  "mu": 0.09802640177754542,
+  "lambda_grid": [
+   0.029407920533263625,
+   0.05881584106652725,
+   0.08822376159979088,
+   0.1176316821330545
+  ]
+ }
+}

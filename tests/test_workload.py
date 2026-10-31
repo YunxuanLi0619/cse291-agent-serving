@@ -69,7 +69,12 @@ def test_every_task_has_needle_steps_and_deadline(tmp_path):
 
 
 def test_deadline_is_five_times_t_solo_from_input_table(tmp_path):
-    wl = load(gen(tmp_path, "w.json", n_tasks=200))
+    table = tmp_path / "t_solo.json"  # 自带固定的表:configs/t_solo.json 每次重新校准都会变
+    table.write_text(json.dumps({"short": 4.3, "longctx": 35.0, "longgen": 22.5, "agent_per_step_s": 8.05}))
+    out = tmp_path / "w.json"
+    main(["--mix", str(CONFIGS / "mix_dev.json"), "--t-solo", str(table), "--seed", "1",
+          "--n-tasks", "200", "--out", str(out)], tokenizer=FakeTokenizer())
+    wl = load(out)
     assert {t["deadline_s"] for t in tasks_of(wl, "short")} == {21.5}
     assert {t["deadline_s"] for t in tasks_of(wl, "longctx")} == {175.0}
     assert {t["deadline_s"] for t in tasks_of(wl, "longgen")} == {112.5}

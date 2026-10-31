@@ -148,3 +148,18 @@
 - `-t 10` 的 c=4 只有 1 个有效样本,所以它与 `-t 8` 的吞吐比较(36.7 vs 40.2)证据较弱;但单流两者差 <3%,结论不依赖它。
 - 第一轮(`threads_run1_confounded.*`)同配置前后差近一倍,原因没查清(可能是后台进程或降频),不用于决策;第二轮同配置前后一致(`-t 8` longctx 26.1 vs 26.4,`-t 4` 34.5 vs 34.5)。
 - 冻结:`configs/server.json` = `{"threads": 8}`。
+
+### 2026-10-30 #7 T_solo 复测(`-t 8`、插电)— 全部类别比 Step 5.5 快 23–29%,重算
+配置同上(`-np 4 -c 16384 --no-kv-unified -t 8`),`caffeinate` 下运行,无热降频记录;每类 3 次单流。脚本 `scripts/prebatch_check.py tsolo`,原始数据 `results/raw/prebatch/tsolo.json`。
+| 类别 | Step 5.5(电池) | 复测 3 次 (s) | 均值 | 偏差 |
+|---|---|---|---|---|
+| short | 4.3 | 3.37 / 3.13 / 3.06 | 3.19 | −26% |
+| longctx | 35.0 | 26.1 / 26.3 / 26.7 | 26.38 | −25% |
+| longgen | 22.5 | 16.4 / 15.5 / 15.9 | 15.95 | −29% |
+| agent(4 步,tool delay 1.0 s) | 35.2 | 28.0 / 27.7 / 27.8 | 27.8(每步 6.20 s) | −23%(每步) |
+- 四类都超过 15% → 按验收标准重算。**根因基本是电源:** Step 5.5 在电池下测,现在插电;与记录本此前"速度对电源状态极敏感"的观察一致。
+- `configs/t_solo.json` 已更新为新表(`agent_per_step_s` = 6.2),`configs/server.json` = `{"threads": 8}`。
+- 新预算(默认混合 40/20/20/20,仍假设 P_eff(4)=1.5):S̄ = 15.30 s,μ ≈ **0.098 task/s**,λ 网格 {0.3, 0.6, 0.9, 1.2}×μ = **{0.029, 0.059, 0.088, 0.118} task/s**(旧:S̄ 20.26 s、μ 0.074、λ 0.022–0.089)。
+- 新 deadline = 5 × T_solo:short 16.0 s、longctx 131.9 s、longgen 79.8 s、agent 5 × (6.2 × 步数 + Σ tool delay);任务级超时公式 min(300, 10 × T_solo) 给出 short 32 s、longctx 264 s、longgen 160 s。**已生成的 `workloads/dev/default_s1.json` 里的 deadline 是旧的,#8 冻结 deadline 时必须重新生成。**
+- 总机时需按新 S̄ 和 c=8 的 P_eff 重估(等 c=8 测完再做)。
+- 测试:`test_deadline_is_five_times_t_solo_from_input_table` 原先读共享的 `configs/t_solo.json` 并写死旧数值,重新校准必然失败 → 改成自带固定的表。
