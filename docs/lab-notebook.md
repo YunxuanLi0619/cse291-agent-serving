@@ -187,3 +187,39 @@
 - 冻结:`-t 8`(`configs/server.json`),T_solo 新表(`configs/t_solo.json`),μ ≈ 0.098 task/s,λ ∈ {0.029, 0.059, 0.088, 0.118}。
 - 总机时按 S̄ 的比例近似缩放(15.30 / 20.26 = 0.755):约 20.6 h → **≈ 15.6 h**(粗估,没有逐项重算;P_eff(4) 与 P_eff(8) 都沿用 1.5)。若不复用 E4 / E5 的数据则约 19 h。
 - #8 必须:用新 T_solo 重新生成 Dev workload 并冻结 deadline(`workloads/dev/default_s1.json` 里是旧值)。
+
+### 2026-10-31 #8 冒烟(真 llama-server,30 Task,c=2)
+`-np 4 -c 16384 --no-kv-unified -t 8`,插电、低电量模式关、`caffeinate` 下运行。`runner --c 2 --lambda 0.06 --n-tasks 30`,原始数据 `results/raw/smoke_8/run/`(server 日志 `smoke_8/server.log`,整个 #8 期间共用一份)。
+- **三类日志 + manifest 齐全;`tasks.jsonl` 恰好 30 行**(`requests.jsonl` 43 行)。`manifest.json` 的 `errors` 为空。
+- **`--timeout 1`**(`smoke_8/timeout1`,8 个 Task、λ=0.5):`tasks.jsonl` 8 行全是 `status=timeout`,`requests.jsonl` 8 行 `timeout/request_timeout`,没有丢 Task;20 s 后 `/slots` 四个都空闲。
+- **真 server 下的采样器:** `footprint_mb` 3792–3872(1244 次采样,无一次 `error`)、`live_tokens` 0–6121、`requests_processing` 0–3、每 slot `is_processing` 都有;启动前 `/slots` 条数校验通过。
+- **这次 30 个 Task 里 16 个 timeout,不是 bug:** λ=0.06 对 c=2 过载(粗估 c=2 的容量约 0.07 task/s,没测;前 30 个里重 Task 偏多),排队 100–250 s,命中任务级超时(short 32 s、其余按 10×T_solo 取 300 封顶)。冒烟只用来验证日志不丢行。
+- **`requests_processing` 到过 3 > c=2:** 超时断连的请求若还在 prefill,server 的 slot 继续忙到 prefill 结束(见 2026-10-19 #3 补充),runner 已经释放了并发名额,下一个请求就和它重叠。与已有观察一致,不矛盾。
+- **needle 失败的根因(冒烟发现):** 冒烟里 9 个 longctx 有 3 个 `quality_pass=false`。直接对同样的 prompt 重放(temperature 0):Llama-3.2-3B 回 "I can't provide information or guidance on illegal or harmful activities ..."——**"secret key" 触发安全拒答**。把 "The secret key is" / "What is the secret key ..." 换成 "The reference code is" / "What is the reference code ... Reply with the code only." 后,3 个失败 prompt 全部答对。已改 `src/runner/gen_workload.py`(`RECALL_QUESTION`、needle 句)并重新生成 Dev workload;`tests/test_workload.py` 里的措辞同步。冒烟用的是改之前的 workload(sha `df59750…`)。
+
+### 2026-10-31 #8 agent 续步的前缀复用有没有被别的短请求打断(调研补充条件)
+工具:`python -m src.analysis.slot_trace`(新,有单测):按 `t_start` 把 server 日志里每个请求的 `selected slot by LRU/LCP` + `launch_slot_` 一一对回 `requests.jsonl`(OAI 响应没有 `id_slot`)。数量对不上就拒绝对应,日志共用时用 `--skip`。对应关系的自检:工具内置用 server 释放 slot 时的 `n_tokens` 核对每个 ok 请求的 prompt+输出 token 数(对不上就报错;冒烟 35、基线 137、补测 42 个全部 0 不一致,包括 c=2 的冒烟);另外第 3 步起 `cached_tokens` ≈ 上一步完整上下文且 100% 回到同一个 slot。限制:只对 ok 且到过 server 的请求;没到 server 就被取消的请求会让数量对不上,工具拒绝而不是猜。
+- **基线(c=1,agent 21 个,含超时前已发出的步骤)的第 2 步:** 27 次里 23 次回到原 slot(`cached_tokens` ≈ 927/928);4 次换 slot,`cached_tokens=30`(只剩 chat template 前缀)。第 3–6 步 23/23、13/13、8/8、3/3 都回原 slot。
+- **明确的短请求打断实例:** `t0075`(agent,status ok)第 1 步在 slot 1;Tool delay 期间 `t0076`(short)到达,**按 LCP 选中 slot 1,`f_sim_best = 0.125`(> 0.100 thold)**,覆盖了 agent 的前缀;第 2 步只能 LRU 选 slot 2,`cached_tokens=30`。这就是调研预测的机制,**本次第一次直接观察到**。
+- **longgen(256 token prompt)同样会触发:** 基线里 `t0011/t0037` 等 longgen 以 f_sim 0.117–0.125 按 LCP 抢占别人的 slot,不只是 short。
+- **另外 3 次(`t0009/t0010/t0034`,都在排队突发里):** agent 的第 2 步重新排到 FIFO 队尾,等到时中间已经有 4–5 次别的启动(含 LCP 覆盖和 LRU 轮转),4 个 slot 基本被轮了一遍。冒烟(c=2 严重过载)里 7 个 agent 的第 2 步有 6 个是这样(中间 4–9 次启动),只有 `t0029` 命中。**只有中间启动数 <3 时原 slot 才可能幸存**(`t0029`:3 次启动落在另外 3 个 slot 上,第 2 步 LCP 命中)。
+- **对 E3/E4 的含义:** 混合负载下 agent 续步的 `cached_tokens` 是否命中,取决于 Tool delay 期间 / 排队期间别的请求怎么占 slot,不是 `cache_prompt` 开关本身;分析时要按这个机制解释,不要把 `cached_tokens=30` 都当作 `cache_prompt=false` 的效果。
+- 样本量小(单个 seed、c=1 基线 + 一次过载冒烟),没做统计,只是机制验证。
+
+### 2026-10-31 #8 单流(c=1)质量基线 — 每类 ≥ 90%,deadline 冻结
+Dev workload(`workloads/dev/default_s1.json`,seed 1,100 个 Task:short 39 / longctx 21 / longgen 19 / agent 21)。`runner --c 1 --lambda 0.029 --policy fifo`,运行 3616 s,插电,无 ≥5 s 的采样缺口,`manifest.errors` 为空。原始数据 `results/raw/baseline_8/run/`。
+- **第一遍 18 个 Task 超时(排队,不是质量):** Poisson 突发使 c=1 下排队,short 都卡在 32 s 的任务级超时(11 个)、agent 300 s(6 个)、longgen 160 s(1 个);`requests.jsonl` 里没有一个请求本身报错。完成的 Task 里 pass:short 28/28、longctx 20/21、longgen 18/18、agent 14/15。
+- **补测:** 把这 18 个 Task 单独抽成子集(`baseline_8/rerun_workload/timeouts_subset.json`,`unit_gap_s` 全改成 1,λ=1/70 即固定 70 s 间隔,保证无排队;sha `8eb6432…`,**不是**冻结的 workload),`baseline_8/rerun/`,18 个全部 ok,`requests_processing` 最大 1,无睡眠缺口。每个 Task 的结果取「第一遍 ok 就用第一遍,否则用补测」。
+- **单流 quality pass 率(Phase 2 的质量基线):**
+  | 类别 | 个数 | pass | 率 |
+  |---|---|---|---|
+  | short | 39 | 39 | 100.0% |
+  | longctx | 21 | 20 | 95.2% |
+  | longgen | 19 | 19 | 100.0% |
+  | agent | 21 | 20 | 95.2% |
+  失败 2 个:`t0071`(longctx)——模型答了 `6y85e5u8`,**去掉了 `KEY-` 前缀**,按子串检查算失败,内容其实对(「Reply with the code only」容易让模型剥掉前缀;检查口径保持严格子串、对所有条件一致,所以不影响对比,只让绝对值略偏保守;若改成只查 8 位后缀,longctx 会是 100%,但那需要重测基线);`t0098`(agent,5 步)原因没查。
+- **补测的单流耗时:** short 均 2.9 s(11 个)、longgen 14.0 s(1 个)、agent 35.5 s(6 个,步数/delay 不同),与 T_solo(3.19 / 15.95 / 6.2×步数+Σdelay)同量级。
+- **合盖照跑(顺带观察):** 第一遍 Run 中 23:46:53 起合盖(`pmset -g log` 里 `Clamshell Sleep` → DarkWake),计算没有停(无采样缺口),合盖后 short 延迟 2.9 s 对盖前 3.35–3.49 s,没变慢。插电 + `caffeinate -is` 的前提下这台机器合盖可以继续跑;没有设 `pmset disablesleep`。
+- **冻结:** Dev workload 的 `deadline_s = 5 × T_solo`(用 #7 的新表:short 15.95 s、longctx 131.9 s、longgen 79.75 s、agent 5×(6.2×步数+Σdelay))已写入。**`workloads/dev/default_s1.json` sha256 = `4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a`**,与基线 Run 的 `manifest.json:workload_sha256` 一致。之后不得改动;要改 T_solo 或 needle 措辞就要重新生成并重测基线。
+- **与已有观察的出入:** 无矛盾。要补充的两点:① "超时主动断连 ≈0.7 s 释放 slot" 只对 decode 阶段成立,冒烟里 prefill 阶段超时的请求仍占 slot(上面 `requests_processing` 到 3);② Step 5.5 里的 LCP 机制从"源码结论"变成"有一个实测实例"(见上)。
+- **注意:** 单流基线只在 `-np 4 -c 16384 --no-kv-unified -t 8` 下测;换 c / 系列 U 之后的质量要另测。

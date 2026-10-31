@@ -7,7 +7,7 @@ from src.runner.gen_workload import main
 
 from fake_tokenizer import FakeTokenizer
 
-RECALL_QUESTION = "What is the secret key mentioned at the beginning of this conversation? Reply with the key only."
+RECALL_QUESTION = "What is the reference code mentioned at the beginning of this conversation? Reply with the code only."
 ROOT = Path(__file__).resolve().parent.parent
 CONFIGS = ROOT / "configs"
 

@@ -12,8 +12,10 @@ from pathlib import Path
 WORDS = ("alpha river stone market window garden copper signal harbor violet engine paper "
          "lantern meadow thunder basket orbit canyon ribbon falcon marble velvet anchor cobalt "
          "saddle timber quartz meteor candle summit pebble tunnel harvest compass glacier").split()
-RECALL_QUESTION = ("What is the secret key mentioned at the beginning of this conversation? "
-                   "Reply with the key only.")
+# 措辞是 #8 冒烟后改的:Llama-3.2-3B 对 "secret key" 常拒答("I can't provide ... illegal or harmful"),
+# 改成 "reference code" 后同一批 prompt 全部答对
+RECALL_QUESTION = ("What is the reference code mentioned at the beginning of this conversation? "
+                   "Reply with the code only.")
 TOLERANCE = 0.05
 TOOL_RESULT_TOKENS = 150
 # 每个 Task type 的第 1 步 prompt_tokens 目标(含 chat template)与每步输出上限
@@ -68,7 +70,7 @@ def _first_prompt(tokenizer, ws: _WordStream, needle: str, needle_frac: float, s
     def content(n: int) -> str:
         words = ws.words(n)
         at = round(n * needle_frac)
-        return (" ".join(words[:at]) + f" The secret key is {needle}. " + " ".join(words[at:])
+        return (" ".join(words[:at]) + f" The reference code is {needle}. " + " ".join(words[at:])
                 + "\n\n" + suffix)
 
     def count(n: int) -> int:

@@ -24,6 +24,10 @@ python -m src.runner.gen_workload --mix configs/mix_dev.json --t-solo configs/t_
 python -m src.runner.run --workload workloads/dev/default_s1.json --c 4 --lambda 0.05 \
   --policy fifo --out results/raw/try1 --server-pid $(pgrep -f llama-server)
 
+# OAI 接口的响应没有 id_slot:把 server 日志里每个请求的 slot 选择(LRU / LCP 及相似度)按顺序对回 requests.jsonl,
+# 用来解释 agent 续步的 cached_tokens(--skip = 日志里本 Run 之前已有的 launch 数,日志被别的请求共用时必填)
+python -m src.analysis.slot_trace --run results/raw/try1 --server-log server.log --skip 0
+
 # 分析:一条命令从原始日志目录(递归查找已完成的 Run 目录)重新生成全部 CSV 和图
 python -m src.analysis --raw results/raw/e1 --out results/analysis
 ```
