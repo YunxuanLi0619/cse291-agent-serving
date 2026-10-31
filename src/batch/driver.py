@@ -15,7 +15,7 @@ import os
 import shutil
 import threading
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Protocol
@@ -71,9 +71,27 @@ class Batch:
         self.raw = self.root / "results/raw/batch"
         self.work = self.root / "results/batch"
         self.state = {"failed_runs": {}, "blocked_stages": {}}
+        self._stages: list[Stage] = []
 
     def log(self, msg: str) -> None:
         self._log(f"[{datetime.now().strftime('%F %T')}] {msg}")
+
+    def _read(self, fn: Callable[[], str], what: str) -> str:
+        """pmset 偶尔超时或失败:读不到当成空串(门禁会按「读不到」处理),不让批跑崩掉。"""
+        try:
+            return fn()
+        except Exception as e:
+            self.log(f"cannot read {what}: {type(e).__name__}: {e}")
+            return ""
+
+    def _batt(self) -> str:
+        return self._read(self.h.batt, "pmset -g batt")
+
+    def _settings(self) -> str:
+        return self._read(self.h.settings, "pmset -g")
+
+    def _therm(self) -> str:
+        return self._read(self.h.therm, "pmset -g therm")
 
     # ---- 入口 ----
     def run(self) -> int:
@@ -81,7 +99,7 @@ class Batch:
             d.mkdir(parents=True, exist_ok=True)
         self._start_snapshot()
         self._set_aside_leftovers()
-        stages = [s for s in build_plan(self.cfg) if self.only is None or s.experiment in self.only]
+        stages = self._stages = [s for s in build_plan(self.cfg) if self.only is None or s.experiment in self.only]
         for stage in stages:
             self._run_stage(stage)
         self._write_state()
@@ -91,7 +109,7 @@ class Batch:
         return 1 if self.state["failed_runs"] or self.state["blocked_stages"] else 0
 
     def _start_snapshot(self) -> None:
-        batt, settings, therm = self.h.batt(), self.h.settings(), self.h.therm()
+        batt, settings, therm = self._batt(), self._settings(), self._therm()
         problems = gate_problems(batt, settings)
         snap = {"time": datetime.now(timezone.utc).isoformat(), "batt": batt, "settings": settings, "therm": therm,
                 "gate_problems": problems}
@@ -138,11 +156,16 @@ class Batch:
             self._wait_for_ac()
             therm_start, throttled_wait = self._cool_down()
             running = self.work / "running" / spec.name
+            if running.exists():
+                self._move_invalid(running, ["stale directory in running/ before the attempt"])
             running.mkdir(parents=True)
             problems, meta = self._execute(spec, running, therm_start)
             if spec.pilot and not problems:
-                problems = self._pilot_problems(spec, running)
-                meta["cache_prompt_off_effective"] = self._cache_off_effective(spec, running)
+                try:
+                    problems = self._pilot_problems(spec, running)
+                    meta["cache_prompt_off_effective"] = self._cache_off_effective(spec, running)
+                except Exception as e:
+                    problems = [f"pilot checks crashed: {type(e).__name__}: {e}"]
             if problems:
                 self.log(f"attempt {attempt}/{attempts} invalid: {spec.name}: {'; '.join(problems)}")
                 self.state["last_problems"] = problems
@@ -152,8 +175,10 @@ class Batch:
                         throttled_wait_s=throttled_wait, problems=[])
             (running / "batch_meta.json").write_text(json.dumps(meta, indent=1, default=str))
             dest = dest_root / spec.name
+            if dest.exists():  # 没有完成标记的残留(上次崩在改名前后):挪开,不让它挡住刚跑完的有效结果
+                self._move_invalid(dest, ["stale destination without batch_meta.json"])
             os.replace(running, dest)  # 同一文件系统上的原子改名:出现在 dest = 完成
-            self.log(f"done: {spec.name} (attempt {attempt}, throttled={meta['throttled']})")
+            self.log(f"done: {spec.name} (attempt {attempt}, throttled={meta['throttled']}); {self._eta()}")
             return True
         return False
 
@@ -181,10 +206,13 @@ class Batch:
                 meta["throttled"] = meta["throttled"] or sampler.throttled
             if handle:
                 handle.stop()
-        meta["therm_end"] = self.h.therm()
+        meta["therm_end"] = self._therm()
         meta["throttled"] = meta["throttled"] or is_throttled(meta["therm_end"])
-        problems += [f"at end: {p}" for p in gate_problems(self.h.batt(), self.h.settings())]
-        problems += validate_run(run_dir, spec.n_tasks)
+        problems += [f"at end: {p}" for p in gate_problems(self._batt(), self._settings())]
+        try:  # runner 被杀后 manifest / JSONL 可能写了一半:这次尝试作废,不能让异常把整个批跑带走
+            problems += validate_run(run_dir, spec.n_tasks)
+        except Exception as e:
+            problems.append(f"validation crashed: {type(e).__name__}: {e}")
         return problems, meta
 
     # ---- 试跑特有检查 ----
@@ -212,7 +240,7 @@ class Batch:
     # ---- 等待 ----
     def _wait_for_ac(self) -> None:
         waited = False
-        while problems := gate_problems(self.h.batt(), self.h.settings()):
+        while problems := gate_problems(self._batt(), self._settings()):
             if not waited:
                 self.log(f"waiting for AC power / normal power mode: {'; '.join(problems)}")
                 waited = True
@@ -220,11 +248,11 @@ class Batch:
 
     def _cool_down(self) -> tuple[str, float]:
         """降频中就等一会儿(有上限,不无限等);返回开跑前的 therm 文本和等待秒数。"""
-        waited, therm = 0.0, self.h.therm()
+        waited, therm = 0.0, self._therm()
         while is_throttled(therm) and waited < self.cooldown_max_s:
             self.h.sleep(self.cooldown_poll_s)
             waited += self.cooldown_poll_s
-            therm = self.h.therm()
+            therm = self._therm()
         return therm, waited
 
     # ---- 整理 ----
@@ -237,6 +265,10 @@ class Batch:
         shutil.move(str(d), dest)
         (dest / "problems.json").write_text(json.dumps(problems, indent=1))
 
+    def _eta(self) -> str:
+        left = [r for st in self._stages for r in st.runs if not (self.raw / r.name / "batch_meta.json").exists()]
+        return f"{len(left)} runs left, ~{sum(r.estimated_s for r in left) / 3600:.1f} h"
+
     def _write_state(self) -> None:
         state = {k: v for k, v in self.state.items() if k != "last_problems"}
         (self.work / "state.json").write_text(json.dumps(state, indent=1))
@@ -247,7 +279,12 @@ class Batch:
         rows = self._e1_rows([s for s in stages if s.experiment == "E1-S"][0])
         if not rows:
             return
-        result = select_baseline(rows) | {"experiment": "E1-S", "n_runs": len(rows), "rule": "see src/batch/baseline.py"}
+        expected = {c: self.cfg["reps"] for c in self.cfg["e1_concurrency"]}
+        have = {c: sum(r["c"] == c for r in rows) for c in expected}
+        result = select_baseline(rows) | {"experiment": "E1-S", "n_runs": len(rows), "complete": have == expected,
+                                          "rule": "see src/batch/baseline.py"}
+        if not result["complete"]:
+            self.log(f"WARNING: E1-S is incomplete ({have}, expected {expected}); the baseline c is provisional")
         (self.work / "baseline_c.json").write_text(json.dumps(result, indent=1))
         self.log(f"Fixed-concurrency baseline: c={result['c']} (p99 acceptable: {result['p99_acceptable']})")
 
@@ -257,7 +294,10 @@ class Batch:
                  for r in planned if (self.raw / r.name / "batch_meta.json").exists()}
         summary = {"planned": len(planned), "done": len(metas), **{k: self.state[k] for k in ("failed_runs", "blocked_stages")},
                    "throttled_runs": sorted(n for n, m in metas.items() if m["throttled"]),
-                   "retried_runs": {n: m["attempt"] for n, m in metas.items() if m["attempt"] > 1}}
+                   "retried_runs": {n: m["attempt"] for n, m in metas.items() if m["attempt"] > 1},
+                   # E4 的 cache_prompt=on、E5 的 λ=0.9μ 复用 E1-S 的 Run;那几个 Run 缺了,配对分析会有洞
+                   "missing_reused": {st.experiment: missing for st in stages
+                                      if (missing := [n for n in st.reused if not (self.raw / n / "batch_meta.json").exists()])}}
         (self.work / "summary.json").write_text(json.dumps(summary, indent=1))
 
     def _e1_rows(self, stage: Stage) -> list[dict]:
@@ -272,7 +312,8 @@ class Batch:
             run = load_run(d)
             rows.append({"c": spec.c, "seed": spec.seed, "run": spec.name,
                          "goodput_per_s": run_metrics(run.tasks)["goodput_per_s"],
-                         "p99_deadline_ratio": p99_deadline_ratio(run.tasks)})
+                         "p99_deadline_ratio": p99_deadline_ratio(run.tasks),
+                         "fail_rate": run_metrics(run.tasks)["fail_rate"]})
         return rows
 
 

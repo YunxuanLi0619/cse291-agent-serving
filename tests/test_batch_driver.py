@@ -261,3 +261,54 @@ def test_pilots_only_runs_one_pilot_per_stage_and_no_full_run(tmp_path):
     assert not any((tmp_path / "results/raw/batch").iterdir())
     make(tmp_path, fake).run()  # 之后的正式批跑不重做已通过的试跑
     assert [st.pilot.name for st in build_plan(CFG)] == fake.ran[:5] and fake.ran.count(build_plan(CFG)[0].pilot.name) == 1
+
+
+def test_a_truncated_manifest_after_a_killed_runner_is_an_invalid_attempt_not_a_crash(tmp_path):
+    fake = Fake()
+    name = plan_names(only=["E1-S"])[0]
+    orig = fake.run_runner
+
+    def truncates(spec, run_dir, handle):
+        rc = orig(spec, run_dir, handle)
+        if spec.name == name:
+            (run_dir / "manifest.json").write_text('{"c": 1, "lam')
+        return rc
+
+    fake.run_runner = truncates
+    assert make(tmp_path, fake, only=["E1-S"], max_attempts=2).run() == 1
+    assert name in state(tmp_path)["failed_runs"]
+    assert set(done(tmp_path)) == set(plan_names(only=["E1-S"])) - {name}
+
+
+def test_failing_pmset_commands_are_treated_as_unreadable_not_as_a_crash(tmp_path):
+    fake = Fake()
+    calls = {"n": 0}
+
+    def flaky_therm():
+        calls["n"] += 1
+        if calls["n"] % 2:
+            raise RuntimeError("pmset timed out")
+        return NO_THERM
+
+    make(tmp_path, fake, only=["E1-S"], hooks=fake.hooks(therm=flaky_therm)).run()
+    assert set(done(tmp_path)) == set(plan_names(only=["E1-S"]))
+
+
+def test_a_leftover_destination_without_completion_marker_does_not_block_the_finished_run(tmp_path):
+    name = plan_names(only=["E1-S"])[0]
+    stale = tmp_path / "results/raw/batch" / name
+    stale.mkdir(parents=True)
+    (stale / "tasks.jsonl").write_text("{}\n")
+    assert make(tmp_path, Fake(), only=["E1-S"]).run() == 0
+    assert (stale / "batch_meta.json").exists()
+    assert any(p.name.startswith(name) for p in (tmp_path / "results/batch/invalid").iterdir())
+
+
+def test_summary_flags_reused_runs_that_are_missing_and_baseline_flags_incomplete_data(tmp_path):
+    fake = Fake()
+    victim = [r.name for r in build_plan(CFG)[0].runs if r.c == 4][0]  # E1-S c=4:E4 和 E5 都复用它
+    fake.bad_runs[victim] = 99
+    make(tmp_path, fake, max_attempts=1).run()
+    summary = json.loads((tmp_path / "results/batch/summary.json").read_text())
+    assert summary["missing_reused"]["E4"] == [victim] and summary["missing_reused"]["E5"] == [victim]
+    assert json.loads((tmp_path / "results/batch/baseline_c.json").read_text())["complete"] is False

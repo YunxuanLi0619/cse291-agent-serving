@@ -32,6 +32,20 @@ python -m src.analysis.slot_trace --run results/raw/try1 --server-log server.log
 python -m src.analysis --raw results/raw/e1 --out results/analysis
 ```
 
+## 批跑 E1–E5(#9)
+
+```bash
+.venv/bin/python scripts/run_batch.py --dry-run               # 计划与估计时长(约 19 h),不要求插电
+.venv/bin/python scripts/run_batch.py --pilots-only           # 只做各实验的 30 Task 试跑
+caffeinate -is scripts/run_batch.sh                           # 正式批跑;中断后原样重跑,从下一个 Run 继续
+```
+
+- 矩阵与排序在 `src/batch/plan.py`(参数在 `configs/batch.json`):E1-S(c=1/2/4/8,λ=0.9μ)→ E4(cache_prompt 关,c=1/4)→ E5(λ=0.3/0.6/1.2μ,c=4)→ E3(Tool delay 0/0.5/1/3 s,c=4)→ E1-U(`-kvu`,np=8,c=4/8);每个配置 3 次,重复 i 用 seed i;E4 的「开」和 E5 的 0.9μ 复用 E1-S 的 Run,E2 从 E1 数据按 Step 切片。
+- 每个实验先用 30 Task 试跑,过了才放开全量;试跑没过的实验记入 `results/batch/state.json` 的 `blocked_stages`,其余实验继续。
+- 每个 Run 前重启服务、记录冷启动秒数(manifest 的 `cold_start_s`);前 3 个 Task 标 `warmup`。每批开始前把电源、低电量模式和 `pmset -g therm` 写进 `results/batch/batch_start_*.json`,未插电则拒绝启动(退出码 3);批跑中途被拔电会暂停等待。
+- 通过校验的 Run 在 `results/raw/batch/<run>/`(存在 `batch_meta.json` 即视为完成);没过校验的尝试挪到 `results/batch/invalid/` 并重试(最多 3 次)。降频只记录(`batch_meta.json` 的 `throttled`),不拒绝。
+- 结束时写 `results/batch/summary.json`、`baseline_c.json`(Dev workload 上的 Fixed-concurrency baseline,规则见 `src/batch/baseline.py`)并跑分析到 `results/analysis/batch`。
+
 - 分析输出:`runs.csv`(每个 Run 一行);每张图 = 同名 `.csv` + `.png`,报告引用 CSV:`perf_by_{c,lambda,tool_delay_s}_<platform>`(吞吐/goodput、p50/p99、排队、失败/超时率,按其余配置分线,误差条 = 重复间样本标准差)、`paired_cache_prompt_<platform>`(同 seed 内 on − off)、`step_slice_<platform>`(agent 第 k 步)、`memory_peak_<platform>`、`kv_util_<platform>`。不同平台各出一套,不混画。
 - 指标口径写在 `src/analysis/metrics.py` 顶部:稳态排除 `warmup=true`;p50/p99 只算 ok Task;失败/超时进分母;吞吐和 goodput 除以稳态窗口(最早到达 → 最晚完成)。
 - 分析从 manifest 读配置:`c`、`lambda`、`seed`、`server_cmdline`(解析 `-np`、`-c`、系列 S/U)。分组还用到可选字段 `tool_delay_s`、`cache_prompt`,由批跑脚本写入 manifest;缺省为空,不影响其他分析。manifest 没有 `t_end` 的 Run 视为未完成,跳过。

@@ -71,7 +71,7 @@ def build_plan(cfg: dict) -> list[Stage]:
     seeds = range(1, cfg["reps"] + 1)
 
     def spec(series="S", c=4, lam_=lam_e1, cp=True, delay=None, seed=1, np_=None, n=cfg["n_tasks"], pilot=False):
-        return RunSpec(series, np_ or c if series == "S" else np_, cfg["ctx"], c, lam_, cp, delay, seed, n, pilot)
+        return RunSpec(series, c if series == "S" else np_, cfg["ctx"], c, lam_, cp, delay, seed, n, pilot)
 
     def pilot_of(s: RunSpec) -> RunSpec:
         return replace(s, seed=1, n_tasks=cfg["pilot_n_tasks"], pilot=True)

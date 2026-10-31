@@ -13,8 +13,8 @@ def test_p99_deadline_ratio_uses_steady_ok_tasks_only():
     assert math.isnan(p99_deadline_ratio([task(1.0, status="timeout")]))
 
 
-def runs(c, goodputs, p99s):
-    return [{"c": c, "seed": i + 1, "goodput_per_s": g, "p99_deadline_ratio": p}
+def runs(c, goodputs, p99s, fail=0.0):
+    return [{"c": c, "seed": i + 1, "goodput_per_s": g, "p99_deadline_ratio": p, "fail_rate": fail}
             for i, (g, p) in enumerate(zip(goodputs, p99s))]
 
 
@@ -40,3 +40,11 @@ def test_runs_with_nan_metrics_do_not_break_the_choice():
     table = runs(1, [0.03] * 3, [0.8] * 3) + runs(2, [0.05, 0.05, 0.05], [float("nan")] * 3)
     r = select_baseline(table)
     assert r["c"] == 1
+
+
+def test_a_c_where_most_tasks_fail_is_not_acceptable_even_if_the_few_ok_ones_are_fast():
+    # 过载时只有少数快的 Task 完成,ok 任务的 p99 看着很好;失败率必须一起拦(幸存者偏差)
+    table = runs(2, [0.04] * 3, [0.9] * 3, fail=0.02) + runs(8, [0.05] * 3, [0.3] * 3, fail=0.6)
+    r = select_baseline(table)
+    assert (r["c"], r["p99_acceptable"]) == (2, True)
+    assert {row["c"]: row["acceptable"] for row in r["by_c"]} == {2: True, 8: False}
