@@ -1,0 +1,45 @@
+{
+ "threads": 8,
+ "np": 8,
+ "runs": [
+  {
+   "conc": 4,
+   "wall_s": 48.38653326034546,
+   "agg_tok_per_s": 42.32582625791071
+  },
+  {
+   "conc": 8,
+   "wall_s": 47.71665000915527,
+   "agg_tok_per_s": 42.92002895440177
+  },
+  {
+   "conc": 4,
+   "wall_s": 59.66295289993286,
+   "agg_tok_per_s": 34.32615887173604
+  },
+  {
+   "conc": 8,
+   "wall_s": 48.074609994888306,
+   "agg_tok_per_s": 42.600449597360445
+  }
+ ],
+ "mean_agg_tok_per_s": {
+  "4": 38.32599256482338,
+  "8": 42.760239275881105
+ },
+ "c8_over_c4": 1.1156981571594728,
+ "env_start": {
+  "time": "2026-10-30 22:53:45",
+  "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t100%; charged; 0:00 remaining present: true",
+  "lowpowermode": "lowpowermode         0",
+  "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "top_cpu": "792.0 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  1.0 .venv/bin/python\n  0.7 /Applications/WeChat.app/Contents/MacOS/WeChat"
+ },
+ "env_end": {
+  "time": "2026-10-30 22:57:09",
+  "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t100%; charged; 0:00 remaining present: true",
+  "lowpowermode": "lowpowermode         0",
+  "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "top_cpu": "793.4 /Users/yunxuanli/src/llama.cpp/build/bin/llama-server\n  0.7 claude\n  0.6 /Applications/WeChat.app/Contents/MacOS/WeChat"
+ }
+}

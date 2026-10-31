@@ -1,0 +1,18 @@
+{
+ "threads": 8,
+ "env_start": {
+  "time": "2026-10-30 23:00:26",
+  "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t100%; charged; 0:00 remaining present: true",
+  "lowpowermode": "lowpowermode         0",
+  "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "top_cpu": "16.6 .venv/bin/python\n 16.0 /System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal\n 10.3 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer"
+ },
+ "cold": {
+  "wait_health_s": 2,
+  "ready_s": 2.644202947616577
+ },
+ "warm": {
+  "wait_health_s": 2,
+  "ready_s": 1.5950353145599365
+ }
+}

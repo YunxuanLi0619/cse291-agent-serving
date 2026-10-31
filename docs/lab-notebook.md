@@ -163,3 +163,27 @@
 - 新 deadline = 5 × T_solo:short 16.0 s、longctx 131.9 s、longgen 79.8 s、agent 5 × (6.2 × 步数 + Σ tool delay);任务级超时公式 min(300, 10 × T_solo) 给出 short 32 s、longctx 264 s、longgen 160 s。**已生成的 `workloads/dev/default_s1.json` 里的 deadline 是旧的,#8 冻结 deadline 时必须重新生成。**
 - 总机时需按新 S̄ 和 c=8 的 P_eff 重估(等 c=8 测完再做)。
 - 测试:`test_deadline_is_five_times_t_solo_from_input_table` 原先读共享的 `configs/t_solo.json` 并写死旧数值,重新校准必然失败 → 改成自带固定的表。
+
+### 2026-10-30 #7 c=8 聚合吞吐
+`-np 8 -c 16384 --no-kv-unified -t 8`,插电、`caffeinate`、无热降频记录;交替测 c=4 / c=8,每个 16 个请求 × 128 token,2 轮。脚本 `prebatch_check.py c8`,原始数据 `results/raw/prebatch/c8.json`。
+| 轮次 | c=4 | c=8 |
+|---|---|---|
+| 1 | 42.3 tok/s | 42.9 tok/s |
+| 2 | 34.3 tok/s | 42.6 tok/s |
+| 均值 | 38.3 | 42.8 |
+- 第 1 轮配对比值 1.014;均值比值 1.116 是第 2 轮 c=4 偶然变慢(59.7 s vs 48.4 s)造成的,**不能据此说 c=8 更快**。结论:c=8 吞吐不低于 c=4,预算里"P_eff(8) = P_eff(4)"的假设成立。
+- 样本只有 2 轮,c=4 两轮差 20%。P_eff(4) = 1.5(c=4 对 c=1)仍是旧的电池数据,插电后未重测。
+
+### 2026-10-30 #7 冷盘启动
+`sudo purge` 后立刻 `prebatch_check.py cold`(在系统终端里连着执行),`-np 4 -t 8`,2.0 GB 模型(mmap)。原始数据 `results/raw/prebatch/cold_start.json`。
+| | `/health` 就绪 | server 日志 "model loaded" |
+|---|---|---|
+| 冷(purge 后) | 2.64 s | 2.18 s |
+| 热(紧接着再启动) | 1.60 s | 1.18 s |
+- 冷启动只比热多约 1 s,与 2 GB 文件从 SSD 读一遍相符,推断 purge 生效(没有别的直接证据)。样本 1 对 1。
+- 与 Step 5.5 记录的"页缓存热时 5–14 s"不一致:现在热启动只要 1.6 s。没查原因(旧值测量时的电源状态/负载不同?),只记录事实。每次 Run 前重启的开销因此比预算里假设的 30 s 小得多。
+
+### 2026-10-30 #7 小结
+- 冻结:`-t 8`(`configs/server.json`),T_solo 新表(`configs/t_solo.json`),μ ≈ 0.098 task/s,λ ∈ {0.029, 0.059, 0.088, 0.118}。
+- 总机时按 S̄ 的比例近似缩放(15.30 / 20.26 = 0.755):约 20.6 h → **≈ 15.6 h**(粗估,没有逐项重算;P_eff(4) 与 P_eff(8) 都沿用 1.5)。若不复用 E4 / E5 的数据则约 19 h。
+- #8 必须:用新 T_solo 重新生成 Dev workload 并冻结 deadline(`workloads/dev/default_s1.json` 里是旧值)。

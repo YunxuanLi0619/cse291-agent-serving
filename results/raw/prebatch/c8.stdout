@@ -1,0 +1,6 @@
+{'conc': 4, 'wall_s': 48.38653326034546, 'agg_tok_per_s': 42.32582625791071}
+{'conc': 8, 'wall_s': 47.71665000915527, 'agg_tok_per_s': 42.92002895440177}
+{'conc': 4, 'wall_s': 59.66295289993286, 'agg_tok_per_s': 34.32615887173604}
+{'conc': 8, 'wall_s': 48.074609994888306, 'agg_tok_per_s': 42.600449597360445}
+saved /Users/yunxuanli/CSE 291/results/raw/prebatch/c8.json
+mean agg tok/s: c=4 38.3, c=8 42.8 (c8/c4 = 1.116)
