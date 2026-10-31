@@ -30,7 +30,8 @@ def test_start_server_passes_np_ctx_and_fixed_flags_then_extra_flags(tmp_path):
     stub.write_text('#!/usr/bin/env bash\necho "$@"\n')
     stub.chmod(0o755)
     r = subprocess.run([str(START), "4", "16384", "--no-kv-unified"],
-                       env={**os.environ, "LLAMA_SERVER_BIN": str(stub), "MODEL": "m.gguf"},
+                       env={**os.environ, "LLAMA_SERVER_BIN": str(stub), "MODEL": "m.gguf",
+                            "SERVER_CONFIG": str(tmp_path / "absent.json")},  # 无冻结配置 → 默认 8 线程
                        capture_output=True, text=True)
     assert r.returncode == 0
     assert r.stdout.split() == ["-m", "m.gguf", "--host", "127.0.0.1", "--port", "8080",

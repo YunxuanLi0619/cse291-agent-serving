@@ -1,0 +1,124 @@
+{
+ "rounds": [
+  {
+   "threads": 8,
+   "env_start": {
+    "time": "2026-10-19 22:26:41",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t38%; charging; 2:49 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   },
+   "short_s": [
+    3.755375862121582,
+    3.9346330165863037,
+    3.5775492191314697
+   ],
+   "longctx_s": [
+    29.135953903198242,
+    32.49171686172485,
+    36.10112524032593
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 45.884742736816406,
+    "agg_tok_per_s": 22.31678634166943
+   },
+   "env_end": {
+    "time": "2026-10-19 22:29:16",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t39%; charging; 3:19 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   }
+  },
+  {
+   "threads": 4,
+   "env_start": {
+    "time": "2026-10-19 22:29:26",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t39%; charging; 3:19 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   },
+   "short_s": [
+    7.568802118301392,
+    6.318105936050415,
+    7.883607625961304
+   ],
+   "longctx_s": [
+    53.15287399291992,
+    54.135411977767944,
+    57.62281012535095
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 54.30899930000305,
+    "agg_tok_per_s": 18.855070305078193
+   },
+   "env_end": {
+    "time": "2026-10-19 22:33:27",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t41%; charging; 3:21 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   }
+  },
+  {
+   "threads": 10,
+   "env_start": {
+    "time": "2026-10-19 22:33:39",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t41%; charging; 3:21 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   },
+   "short_s": [
+    6.6732916831970215,
+    6.680339097976685,
+    6.751543998718262
+   ],
+   "longctx_s": [
+    41.97651505470276,
+    41.20785212516785,
+    43.448391914367676
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 51.88456106185913,
+    "agg_tok_per_s": 19.736121478972148
+   },
+   "env_end": {
+    "time": "2026-10-19 22:36:58",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t42%; charging; 3:11 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   }
+  },
+  {
+   "threads": 8,
+   "env_start": {
+    "time": "2026-10-19 22:37:10",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t42%; charging; 3:05 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   },
+   "short_s": [
+    6.394820928573608,
+    6.571730852127075,
+    6.5196452140808105
+   ],
+   "longctx_s": [
+    44.79918122291565,
+    45.40646767616272,
+    46.33720803260803
+   ],
+   "agg_c4": {
+    "conc": 4,
+    "wall_s": 47.52129888534546,
+    "agg_tok_per_s": 21.548232561374274
+   },
+   "env_end": {
+    "time": "2026-10-19 22:40:33",
+    "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t44%; charging; 3:04 remaining present: true",
+    "lowpowermode": "lowpowermode         0",
+    "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+   }
+  }
+ ]
+}
