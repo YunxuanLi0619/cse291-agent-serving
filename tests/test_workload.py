@@ -133,3 +133,23 @@ def test_agent_tool_results_are_distinct_and_do_not_repeat_the_first_prompt(tmp_
         assert len(set(results)) == len(results), t["task_id"]
         for r in results:
             assert r[:60] not in first, t["task_id"]
+
+
+def test_fixed_tool_delay_variant_changes_only_delays_and_agent_deadlines(tokenizer):
+    from src.runner.gen_workload import generate_workload, with_fixed_tool_delay
+    mix = json.loads((CONFIGS / "mix_dev.json").read_text())
+    t_solo = {"short": 3.0, "longctx": 20.0, "longgen": 10.0, "agent_per_step_s": 6.0}
+    wl = generate_workload(mix, t_solo, seed=1, n_tasks=30, tokenizer=tokenizer)
+    v = with_fixed_tool_delay(wl, 3.0)
+    assert v["tool_delay_s"] == 3.0
+    assert "tool_delay_s" not in wl  # 不改原对象
+    for old, new in zip(wl["tasks"], v["tasks"]):
+        assert [s["user_content"] for s in old["steps"]] == [s["user_content"] for s in new["steps"]]
+        assert (old["task_id"], old["unit_gap_s"], old["needle"]) == (new["task_id"], new["unit_gap_s"], new["needle"])
+        delays = [s["delay_after_s"] for s in new["steps"]]
+        assert delays == [3.0] * (len(delays) - 1) + [None]  # 最后一步没有 delay
+        if old["type"] == "agent":  # deadline = 5 × (每步 6.0 s × 步数 + Σdelay),用 workload 自带的 t_solo 表
+            assert new["deadline_s"] == 5 * (6.0 * len(delays) + 3.0 * (len(delays) - 1))
+        else:
+            assert new["deadline_s"] == old["deadline_s"]
+    assert any(t["type"] == "agent" for t in wl["tasks"])

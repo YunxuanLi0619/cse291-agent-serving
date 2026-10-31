@@ -37,8 +37,10 @@ def task_timeout_s(task: dict) -> float:
 
 class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是执行器
     def __init__(self, sched: Scheduler, client: httpx.AsyncClient, requests_log: JsonlWriter,
-                 tasks_log: JsonlWriter, now: Callable[[], float], request_timeout_s: float):
+                 tasks_log: JsonlWriter, now: Callable[[], float], request_timeout_s: float,
+                 cache_prompt: bool = True):
         self.sched, self.client, self.now = sched, client, now
+        self.cache_prompt = cache_prompt
         self.requests_log, self.tasks_log = requests_log, tasks_log
         self.request_timeout_s = request_timeout_s
         self._in_flight: dict[int, tuple[int, StreamResult]] = {}  # 在飞 Request → (prompt 估计, 流结果)
@@ -97,7 +99,7 @@ class Executor:  # 注意:术语表里的 Run 是一次完整实验,这里只是
         status, error_type = "ok", ""
         try:
             async with asyncio.timeout(self.request_timeout_s):
-                await stream_chat(self.client, messages, step["max_tokens"], self.now, res)
+                await stream_chat(self.client, messages, step["max_tokens"], self.now, res, self.cache_prompt)
         except TimeoutError:
             status, error_type = "timeout", "request_timeout"
         except RequestFailed as e:
@@ -148,6 +150,9 @@ async def run_all(a, workload: dict) -> None:
     manifest = collect_manifest(repo_dir=REPO_DIR, llama_cpp_dir=Path(a.llama_cpp_dir), server_pid=a.server_pid,
                                 workload_path=Path(a.workload), seed=workload.get("seed"), c=a.c, lam=a.lam,
                                 timeout_s=a.timeout)
+    # 批跑变量:E4 的 cache_prompt、E3 的固定 Tool delay(Workload 顶层键)、冷启动秒数(批跑脚本传入)
+    manifest.update(cache_prompt=a.cache_prompt == "on", tool_delay_s=workload.get("tool_delay_s"),
+                    cold_start_s=a.cold_start_s)
     probe = default_probe()
     manifest["memory_platform"] = probe.platform if probe else None  # 与 system.jsonl 的平台标签对得上
     stamp(manifest, "start")
@@ -163,7 +168,8 @@ async def run_all(a, workload: dict) -> None:
     sampler = None
     try:
         async with httpx.AsyncClient(base_url=a.base_url, timeout=None) as client:
-            executor = Executor(Scheduler(POLICIES[a.policy](), a.c, now), client, requests_log, tasks_log, now, a.timeout)
+            executor = Executor(Scheduler(POLICIES[a.policy](), a.c, now), client, requests_log, tasks_log, now, a.timeout,
+                                a.cache_prompt == "on")
             sampler = SystemSampler(probe, a.server_pid, a.base_url, executor.live_tokens, system_log, now)
             sampler.start()
             await asyncio.gather(*(executor.run_task(task, arrivals[i], i < WARMUP_TASKS)
@@ -190,6 +196,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--server-pid", type=int, help="llama-server 进程号;用于内存采样和 manifest 里的启动命令行")
     ap.add_argument("--llama-cpp-dir", default=os.environ.get("LLAMA_CPP_DIR", str(Path.home() / "src/llama.cpp")),
                     help="llama.cpp 源码目录,manifest 记录其 commit")
+    ap.add_argument("--cache-prompt", choices=["on", "off"], default="on", help="请求体里的 cache_prompt(E4)")
+    ap.add_argument("--cold-start-s", type=float, help="本次 Run 前 server 的冷启动秒数,写进 manifest")
     ap.add_argument("--timeout", type=float, default=REQUEST_TIMEOUT_S, help="请求级超时(秒)")
     a = ap.parse_args(argv)
     workload = json.loads(Path(a.workload).read_text())

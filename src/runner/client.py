@@ -38,9 +38,9 @@ def _classify_error(status_code: int, payload: object) -> RequestFailed:
 
 
 async def stream_chat(client: httpx.AsyncClient, messages: list[dict], max_tokens: int,
-                      now: Callable[[], float], out: StreamResult) -> StreamResult:
+                      now: Callable[[], float], out: StreamResult, cache_prompt: bool = True) -> StreamResult:
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": 0,
-            "ignore_eos": True, "stream": True}
+            "ignore_eos": True, "stream": True, "cache_prompt": cache_prompt}
     pieces, done = [], False
     try:
         async with client.stream("POST", "/v1/chat/completions", json=body) as r:

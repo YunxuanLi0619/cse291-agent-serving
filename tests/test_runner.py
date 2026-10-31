@@ -377,3 +377,25 @@ def test_run_writes_system_log_and_manifest_next_to_the_other_logs(tmp_path, wor
     assert manifest["memory_platform"] == system[0]["platform"]
     assert manifest["t_end"] >= manifest["t_start"]
     assert manifest["t_start_iso"] and manifest["t_end_iso"]
+
+
+def test_cache_prompt_flag_is_sent_in_every_request_and_recorded_in_manifest(tmp_path, workload, fake_server):
+    wl = with_warmup_prefix(workload, first_index(workload, "short"))
+    run(tmp_path, wl, fake_server, c=1, name="on")
+    run(tmp_path, wl, fake_server, c=1, name="off", extra=["--cache-prompt", "off"])
+    on_bodies, off_bodies = fake_server.requests[:4], fake_server.requests[4:]
+    assert all(b["cache_prompt"] is True for b in on_bodies)  # 默认也显式发 true,E4 的两侧请求体只差这一个键
+    assert all(b["cache_prompt"] is False for b in off_bodies)
+    assert json.loads((tmp_path / "on/manifest.json").read_text())["cache_prompt"] is True
+    assert json.loads((tmp_path / "off/manifest.json").read_text())["cache_prompt"] is False
+
+
+def test_manifest_records_cold_start_seconds_and_workload_tool_delay(tmp_path, workload, fake_server):
+    wl = {**with_warmup_prefix(workload, first_index(workload, "short")), "tool_delay_s": 3.0}
+    run(tmp_path, wl, fake_server, c=1, name="m", extra=["--cold-start-s", "7"])
+    manifest = json.loads((tmp_path / "m/manifest.json").read_text())
+    assert manifest["cold_start_s"] == 7.0
+    assert manifest["tool_delay_s"] == 3.0
+    run(tmp_path, with_warmup_prefix(workload, first_index(workload, "short")), fake_server, c=1, name="n")
+    plain = json.loads((tmp_path / "n/manifest.json").read_text())
+    assert plain["cold_start_s"] is None and plain["tool_delay_s"] is None

@@ -1,0 +1,54 @@
+{
+  "n_tasks": 100,
+  "pilot_n_tasks": 30,
+  "reps": 3,
+  "ctx": 16384,
+  "lambda_by_factor": {
+    "0.3": 0.029,
+    "0.6": 0.059,
+    "0.9": 0.088,
+    "1.2": 0.118
+  },
+  "e1_factor": "0.9",
+  "e1_concurrency": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "e1u_concurrency": [
+    4,
+    8
+  ],
+  "e1u_np": 8,
+  "e3_delays_s": [
+    0,
+    0.5,
+    1,
+    3
+  ],
+  "e3_concurrency": 4,
+  "e4_concurrency": [
+    1,
+    4
+  ],
+  "e5_concurrency": 4,
+  "request_timeout_s": 180,
+  "workload_sha256": {
+    "workloads/dev/default_s1.json": "4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a",
+    "workloads/dev/default_s2.json": "af2c8614a6af74bf3a6f140e7dc8a67708036719cae87601844dc9c97ad1415a",
+    "workloads/dev/default_s3.json": "f1c9e8335ac8783638e2ca2026443de1b1a39db2f08e082f97f5b2a6cdd802e3",
+    "workloads/dev/e3_d0.5_s1.json": "86c0b6658f3269892ceaa990242166a42a8518c39c2bcc5f9039d74fe803c239",
+    "workloads/dev/e3_d0.5_s2.json": "b71467c3131fea7ad2f3f7183243eb69f669f7c60eb727d3c9ec585ef7bc804d",
+    "workloads/dev/e3_d0.5_s3.json": "bc149a1082eebc5e224922d361aafc918a9f39570e5b1f210477056e231764f2",
+    "workloads/dev/e3_d0_s1.json": "f45a760bddf7d4b13d6c6123a17bfcda5fceab7099ada527efedbec8eff0e1ea",
+    "workloads/dev/e3_d0_s2.json": "e833a305b32d0bc8fd232472e1063c082665fb3f6a609121829c94a64483db64",
+    "workloads/dev/e3_d0_s3.json": "d027b81a1644280c9574ad797ec50fe35c14c7aac8af8f5b34409fb0ddc5ffb7",
+    "workloads/dev/e3_d1_s1.json": "3dca54a9bf5550cb0f2a4f5ec2f21d5957d47233ea950ec3a2779a9fef67f63c",
+    "workloads/dev/e3_d1_s2.json": "e206514b490ef01794f18fa04a5e538c8c58d5eafd103a860b398ef5051851db",
+    "workloads/dev/e3_d1_s3.json": "945a438aff0067b3e84059ab3122abe44f006c163c8340ae048baf61ea0f6be8",
+    "workloads/dev/e3_d3_s1.json": "b5c07804497915b2c9d24313529da21ebbded1001f93ef5074403fe0c87d3f7a",
+    "workloads/dev/e3_d3_s2.json": "b0809333acca86c7d5d0aad16bcfabcb7c45313ff510adf739c7d7b7d66fbdcc",
+    "workloads/dev/e3_d3_s3.json": "7b3ced7c178882af06d7f84114dd0fbc7ec5d55817411f689e2c5148407e8348"
+  }
+}

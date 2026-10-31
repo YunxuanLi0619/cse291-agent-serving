@@ -133,6 +133,22 @@ def generate_workload(mix_cfg: dict, t_solo: dict, seed: int, n_tasks: int, toke
             "t_solo": t_solo, "tasks": tasks}
 
 
+def with_fixed_tool_delay(workload: dict, delay_s: float) -> dict:
+    """E3 变体:所有 Tool delay 取同一个值,agent 的 deadline 按 Workload 自带的 T_solo 表和新 delay 重算。
+
+    其余内容(prompt、Needle、到达间隔)不变,所以同 seed 的不同 delay 之间可以配对。
+    """
+    t_solo = workload["t_solo"]
+    tasks = []
+    for task in workload["tasks"]:
+        steps = [{**s, "delay_after_s": delay_s if s["delay_after_s"] is not None else None} for s in task["steps"]]
+        task = {**task, "steps": steps}
+        if task["type"] == "agent":
+            task["deadline_s"] = round(5 * (t_solo["agent_per_step_s"] * len(steps) + delay_s * (len(steps) - 1)), 3)
+        tasks.append(task)
+    return {**workload, "tasks": tasks, "tool_delay_s": delay_s}
+
+
 def write_workload(workload: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(workload, sort_keys=True, indent=1, ensure_ascii=False) + "\n")
