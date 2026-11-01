@@ -223,3 +223,28 @@ Dev workload(`workloads/dev/default_s1.json`,seed 1,100 个 Task:short 39 / long
 - **冻结:** Dev workload 的 `deadline_s = 5 × T_solo`(用 #7 的新表:short 15.95 s、longctx 131.9 s、longgen 79.75 s、agent 5×(6.2×步数+Σdelay))已写入。**`workloads/dev/default_s1.json` sha256 = `4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a`**,与基线 Run 的 `manifest.json:workload_sha256` 一致。之后不得改动;要改 T_solo 或 needle 措辞就要重新生成并重测基线。
 - **与已有观察的出入:** 无矛盾。要补充的两点:① "超时主动断连 ≈0.7 s 释放 slot" 只对 decode 阶段成立,冒烟里 prefill 阶段超时的请求仍占 slot(上面 `requests_processing` 到 3);② Step 5.5 里的 LCP 机制从"源码结论"变成"有一个实测实例"(见上)。
 - **注意:** 单流基线只在 `-np 4 -c 16384 --no-kv-unified -t 8` 下测;换 c / 系列 U 之后的质量要另测。
+
+### 2026-11-01 #9 批跑 E1–E5 结果(45 个正式 Run 全部完成)
+条件:HEAD `d23e96d`(启动时工作区干净)、插电 100%、低电量模式关、`caffeinate -is`、`-t 8`;2026-10-31 11:53 启动,2026-11-01 04:50 结束,共 ≈ 17 h(估算 18.9 h)。原始数据 `results/raw/batch/`(45 个目录,47 MB),汇总 `results/batch/summary.json`,分析 `results/analysis/batch/`。
+- **完成情况:** planned 45 / done 45;`failed_runs`、`blocked_stages`、`retried_runs`、`throttled_runs`、`missing_reused` 全空;`invalid/` 为空——每个 Run 第 1 次尝试就通过校验,整批没有降频(`pmset -g therm` 始终无告警),没有拔电。冷启动 1.25–3.29 s(均值 1.95 s)。30-Task 试跑 5 个(E1-S/E4/E5/E3/E1-U)在正式批跑前全部通过,没有重做。
+- **构成:** E1-S 12(c∈{1,2,4,8},λ=0.088)、E4 新增 6(`cache_prompt=off`,c∈{1,4}),E5 新增 9(c=4,λ∈{0.029,0.059,0.118}),E3 12(c=4,λ=0.088,Tool delay {0,0.5,1,3} s),E1-U 6(np=8 `-kvu`,c∈{4,8});E4 的 on 侧、E5 的 λ=0.088 点复用 E1-S;E2 从 E1 数据按 Step 切,没有单独跑。
+- **最重要的发现:λ=0.9μ 对 c≤4 严重过载,μ ≈ 0.098 高估了。** E1-S 三个 seed 的平均:
+
+  | c | goodput (task/s) | p99(完成/deadline) | fail 率 |
+  |---|---|---|---|
+  | 1 | 0.0049 | 1.82 | 63.6% |
+  | 2 | 0.0063 | 1.90 | 63.6% |
+  | 4 | 0.0149 | 1.91 | 58.8% |
+  | 8 | 0.0520 | 1.40 | 29.6% |
+
+  失败几乎全是任务级超时(`timeout_rate` ≈ `fail_rate`)。E5 在 c=4 上扫 λ:0.029 → fail 3.4%、p50 25 s;0.059 → 51.5%;0.088 → 58.8%;0.118 → 82.1%。所以 c=4 的真实饱和点在 **0.3μ 与 0.6μ 之间**(≈ 0.03–0.05 task/s),不是 0.098。根因与 10-31 试跑时的判断一致:P_eff(4)=1.5 是插电前的估计,一直没在插电后重测;不是 runner 或 server 的 bug(`requests_processing` 最大值 ≤ c,无校验失败)。λ 网格已冻结,没有改。
+- **Fixed-concurrency baseline c(按 `src/batch/baseline.py` 的规则):c = 8,但 `p99_acceptable = False`。** 四个 c 都没有满足「p99(完成/deadline) ≤ 1 且 fail ≤ 5%」,规则回退到 goodput 最大的 c=8。**这个 c=8 是过载区间里的相对最优,不是在可接受 p99 下选出来的,Phase 2 用它做 baseline 前需要先决定怎么处理**(选项:在 0.3–0.6μ 之间补测 E1;或明确接受这个回退结果)。`baseline_c.json` 的 `complete=true`(4 个 c × 3 seed 齐全)。
+- **E4(`cache_prompt` on − off,同 seed 配对,3 对):** c=1:p50 −27.3 s(std 14.3)、goodput +0.0027、fail −9.6 个百分点;c=4:p50 −35.9 s(std 51.2)、goodput +0.0105、fail −18.6 个百分点。方向一致(开缓存更好),但两个配置都在过载区间,fail 率差里有排队放大效应,std 很大,只能说方向,不能当作精确效应量。
+- **E3(c=4,λ=0.088,Tool delay 0/0.5/1/3 s):** fail 59–63%,p50 103–114 s,没有可辨的趋势,Tool delay 的影响淹没在过载里。原因同上,不是数据坏了。
+- **E1-U(np=8 `-kvu`,共享池):** c=4 fail 65%、c=8 fail 76%,**比 E1-S 的 c=8(30%)差**。c=8 的 queue_time 只有 17.6 s(S 系列 c=8 为 0.45 s),说明共享池下并发请求争抢 16384 token 的池,而不是排队;没有 pool-exhaustion 错误。
+- **内存(`footprint_mb` 峰值):** S 系列所有 c 都约 3.84–3.87 GB(c=1/2/4/8 差 <1%),U 系列约 3.90 GB——总 KV 预算固定时,峰值内存基本由 B 决定,与 c 无关,和 ADR 0002/0004 的预期一致;RSS 峰值 5.5–5.8 GB。
+- **运行中的问题与修复:**
+  1. 批跑末尾的汇总分析崩溃(`TypeError`):`with_line_label` 拼图例名时遇到缺失的 `tool_delay_s`(只有 E3 的 Run 有这个键)。已修(`src/analysis/report.py`)并加了回归测试,重跑后 `results/analysis/batch/` 完整生成。数据本身不受影响。
+  2. 全量 pytest 曾有一次在 `test_runner.py::test_failures_are_classified_and_never_drop_a_task` 挂起 16 分钟以上,没能复现(单文件 12.8 s 通过,全量 138 个在 76 s 内通过);按偶发 flake 记录。
+- **没做的:** E4 的「共享 / 不共享 system prompt」变体;E1-U 的 c∈{1,2}(规划里只跑了 {4,8})。
+- **背景干扰:** 机器上有 XProtect 偶发占 CPU,我无法排除,也无法在数据里单独识别;同配置三个 seed 之间没有看到明显离群的 Run,但没有做过系统的离群检验。

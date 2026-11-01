@@ -1,0 +1,31 @@
+{
+ "repo_git_sha": "d23e96dbd76ca1df4c681a3f61c76ec7029f7cb9",
+ "repo_dirty": false,
+ "llama_cpp_commit": "1b29621bacc6a446bd523fc790316a24a06e886f",
+ "model_sha256": "6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff",
+ "server_pid": 19572,
+ "server_cmdline": "/Users/yunxuanli/src/llama.cpp/build/bin/llama-server -m /Users/yunxuanli/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8080 -np 8 -c 16384 -t 8 --cache-ram 0 --metrics -kvu",
+ "workload_sha256": "4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a",
+ "seed": 1,
+ "c": 4,
+ "lambda": 0.088,
+ "timeout_s": 120,
+ "pmset_therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+ "platform": {
+  "system": "Darwin",
+  "release": "25.6.0",
+  "machine": "arm64",
+  "python": "3.12.13"
+ },
+ "power_source": "AC Power",
+ "low_power_mode": false,
+ "errors": {},
+ "cache_prompt": true,
+ "tool_delay_s": null,
+ "cold_start_s": 1.71,
+ "memory_platform": "macos",
+ "t_start": 1793529857.733493,
+ "t_start_iso": "2026-11-01T10:44:17.733493+00:00",
+ "t_end": 1793531179.010269,
+ "t_end_iso": "2026-11-01T11:06:19.010269+00:00"
+}

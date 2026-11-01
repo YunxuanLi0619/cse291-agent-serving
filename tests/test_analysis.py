@@ -178,6 +178,16 @@ def test_cache_prompt_and_tool_delay_split_lines_and_cache_prompt_is_compared_pe
     assert (out / "paired_cache_prompt_macos.png").stat().st_size > 0
 
 
+def test_runs_with_and_without_a_tool_delay_in_one_batch_still_get_a_figure(raw, out):
+    # 批跑里只有 E3 的 Run 在 manifest 里带 tool_delay_s,其余没有:缺失值也要能当图例名
+    for c in (1, 4):
+        simple_run(raw, f"plain{c}", c=c)
+        simple_run(raw, f"delay{c}", c=c, tool_delay_s=3.0)
+    main(["--raw", str(raw), "--out", str(out)])
+    assert (out / "perf_by_c_macos.png").stat().st_size > 0
+    assert {r["line"] for r in read_csv(out / "perf_by_c_macos.csv")} == {"nan", "3.0"}
+
+
 def req(task_id, step, *, submit, start, first, end, prompt, cached, status="ok", warmup=False):
     return {"task_id": task_id, "step": step, "t_submit": submit, "t_start": start, "t_first_token": first,
             "t_end": end, "prompt_tokens": prompt, "cached_tokens": cached, "output_tokens": 10, "status": status,

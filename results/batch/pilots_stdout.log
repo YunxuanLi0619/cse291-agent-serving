@@ -1,0 +1,17 @@
+E1-S  pilot pilot_S_np4_c4_lam0.088_cpon_dvar_s1 + 12 runs, reusing 0: ~4.4 h
+E4    pilot pilot_S_np1_c1_lam0.088_cpoff_dvar_s1 + 6 runs, reusing 6: ~2.3 h
+E5    pilot pilot_S_np4_c4_lam0.118_cpon_dvar_s1 + 9 runs, reusing 3: ~5.5 h
+E3    pilot pilot_S_np4_c4_lam0.088_cpon_d3_s1 + 12 runs, reusing 0: ~4.4 h
+E1-U  pilot pilot_U_np8_c4_lam0.088_cpon_dvar_s1 + 6 runs, reusing 0: ~2.3 h
+total ~18.9 h
+[2026-10-31 10:37:22] batch start: AC power, low power mode off, throttled=False
+[2026-10-31 10:37:22] == E1-S: 12 runs (reusing 0 from earlier stages)
+[2026-10-31 10:45:12] done: pilot_S_np4_c4_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False)
+[2026-10-31 10:45:12] == E4: 6 runs (reusing 6 from earlier stages)
+[2026-10-31 10:54:25] done: pilot_S_np1_c1_lam0.088_cpoff_dvar_s1 (attempt 1, throttled=False)
+[2026-10-31 10:54:25] == E5: 9 runs (reusing 3 from earlier stages)
+[2026-10-31 11:02:27] done: pilot_S_np4_c4_lam0.118_cpon_dvar_s1 (attempt 1, throttled=False)
+[2026-10-31 11:02:27] == E3: 12 runs (reusing 0 from earlier stages)
+[2026-10-31 11:10:57] done: pilot_S_np4_c4_lam0.088_cpon_d3_s1 (attempt 1, throttled=False)
+[2026-10-31 11:10:57] == E1-U: 6 runs (reusing 0 from earlier stages)
+[2026-10-31 11:19:24] done: pilot_U_np8_c4_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False)

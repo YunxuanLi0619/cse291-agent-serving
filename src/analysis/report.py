@@ -47,7 +47,7 @@ def aggregate_seeds(df: pd.DataFrame, keys: list[str], metrics: list[str]) -> pd
 def with_line_label(df: pd.DataFrame, line_cols: list[str]) -> pd.DataFrame:
     """加一列 `line`:线的图例名 = 各 line_cols 取值拼接(没有可分的列则为 all)。"""
     data = df.copy()
-    data.insert(0, "line", df[line_cols].astype(str).agg(" ".join, axis=1) if line_cols else "all")
+    data.insert(0, "line", df[line_cols].astype(object).map(str).agg(" ".join, axis=1) if line_cols else "all")
     return data
 
 

@@ -1,0 +1,42 @@
+{
+ "c": 8,
+ "p99_acceptable": false,
+ "by_c": [
+  {
+   "c": 1,
+   "n_runs": 3,
+   "goodput_per_s": 0.004895001523836041,
+   "p99_deadline_ratio": 1.8202588310322037,
+   "fail_rate": 0.6357388316151202,
+   "acceptable": false
+  },
+  {
+   "c": 2,
+   "n_runs": 3,
+   "goodput_per_s": 0.006299374533085903,
+   "p99_deadline_ratio": 1.9041404791885432,
+   "fail_rate": 0.6357388316151202,
+   "acceptable": false
+  },
+  {
+   "c": 4,
+   "n_runs": 3,
+   "goodput_per_s": 0.014902012322843718,
+   "p99_deadline_ratio": 1.9105316045833485,
+   "fail_rate": 0.5876288659793815,
+   "acceptable": false
+  },
+  {
+   "c": 8,
+   "n_runs": 3,
+   "goodput_per_s": 0.05195383214951862,
+   "p99_deadline_ratio": 1.3959038823529697,
+   "fail_rate": 0.29553264604810997,
+   "acceptable": false
+  }
+ ],
+ "experiment": "E1-S",
+ "n_runs": 12,
+ "complete": true,
+ "rule": "see src/batch/baseline.py"
+}

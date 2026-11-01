@@ -1,0 +1,62 @@
+E1-S  pilot pilot_S_np4_c4_lam0.088_cpon_dvar_s1 + 12 runs, reusing 0: ~4.4 h
+E4    pilot pilot_S_np1_c1_lam0.088_cpoff_dvar_s1 + 6 runs, reusing 6: ~2.3 h
+E5    pilot pilot_S_np4_c4_lam0.118_cpon_dvar_s1 + 9 runs, reusing 3: ~5.5 h
+E3    pilot pilot_S_np4_c4_lam0.088_cpon_d3_s1 + 12 runs, reusing 0: ~4.4 h
+E1-U  pilot pilot_U_np8_c4_lam0.088_cpon_dvar_s1 + 6 runs, reusing 0: ~2.3 h
+total ~18.9 h
+[2026-10-31 11:53:49] batch start: AC power, low power mode off, throttled=False
+[2026-10-31 11:53:49] == E1-S: 12 runs (reusing 0 from earlier stages)
+[2026-10-31 12:16:32] done: S_np1_c1_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 44 runs left, ~17.9 h
+[2026-10-31 12:39:04] done: S_np2_c2_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 43 runs left, ~17.5 h
+[2026-10-31 13:00:36] done: S_np4_c4_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 42 runs left, ~17.2 h
+[2026-10-31 13:20:38] done: S_np8_c8_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 41 runs left, ~16.8 h
+[2026-10-31 13:39:17] done: S_np8_c8_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 40 runs left, ~16.4 h
+[2026-10-31 14:00:31] done: S_np4_c4_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 39 runs left, ~16.1 h
+[2026-10-31 14:22:14] done: S_np2_c2_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 38 runs left, ~15.7 h
+[2026-10-31 14:44:07] done: S_np1_c1_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 37 runs left, ~15.4 h
+[2026-10-31 15:05:39] done: S_np1_c1_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 36 runs left, ~15.0 h
+[2026-10-31 15:27:01] done: S_np2_c2_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 35 runs left, ~14.7 h
+[2026-10-31 15:47:28] done: S_np4_c4_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 34 runs left, ~14.3 h
+[2026-10-31 16:05:23] done: S_np8_c8_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 33 runs left, ~13.9 h
+[2026-10-31 16:05:23] == E4: 6 runs (reusing 6 from earlier stages)
+[2026-10-31 16:29:45] done: S_np1_c1_lam0.088_cpoff_dvar_s1 (attempt 1, throttled=False); 32 runs left, ~13.6 h
+[2026-10-31 16:53:39] done: S_np4_c4_lam0.088_cpoff_dvar_s1 (attempt 1, throttled=False); 31 runs left, ~13.2 h
+[2026-10-31 17:15:35] done: S_np4_c4_lam0.088_cpoff_dvar_s2 (attempt 1, throttled=False); 30 runs left, ~12.9 h
+[2026-10-31 17:37:32] done: S_np1_c1_lam0.088_cpoff_dvar_s2 (attempt 1, throttled=False); 29 runs left, ~12.5 h
+[2026-10-31 17:59:33] done: S_np1_c1_lam0.088_cpoff_dvar_s3 (attempt 1, throttled=False); 28 runs left, ~12.2 h
+[2026-10-31 18:20:53] done: S_np4_c4_lam0.088_cpoff_dvar_s3 (attempt 1, throttled=False); 27 runs left, ~11.8 h
+[2026-10-31 18:20:53] == E5: 9 runs (reusing 3 from earlier stages)
+[2026-10-31 19:21:18] done: S_np4_c4_lam0.029_cpon_dvar_s1 (attempt 1, throttled=False); 26 runs left, ~10.8 h
+[2026-10-31 19:51:32] done: S_np4_c4_lam0.059_cpon_dvar_s1 (attempt 1, throttled=False); 25 runs left, ~10.3 h
+[2026-10-31 20:09:21] done: S_np4_c4_lam0.118_cpon_dvar_s1 (attempt 1, throttled=False); 24 runs left, ~10.0 h
+[2026-10-31 20:26:59] done: S_np4_c4_lam0.118_cpon_dvar_s2 (attempt 1, throttled=False); 23 runs left, ~9.7 h
+[2026-10-31 20:56:10] done: S_np4_c4_lam0.059_cpon_dvar_s2 (attempt 1, throttled=False); 22 runs left, ~9.2 h
+[2026-10-31 21:48:58] done: S_np4_c4_lam0.029_cpon_dvar_s2 (attempt 1, throttled=False); 21 runs left, ~8.2 h
+[2026-10-31 22:42:55] done: S_np4_c4_lam0.029_cpon_dvar_s3 (attempt 1, throttled=False); 20 runs left, ~7.2 h
+[2026-10-31 23:11:13] done: S_np4_c4_lam0.059_cpon_dvar_s3 (attempt 1, throttled=False); 19 runs left, ~6.7 h
+[2026-10-31 23:28:50] done: S_np4_c4_lam0.118_cpon_dvar_s3 (attempt 1, throttled=False); 18 runs left, ~6.4 h
+[2026-10-31 23:28:50] == E3: 12 runs (reusing 0 from earlier stages)
+[2026-10-31 23:50:31] done: S_np4_c4_lam0.088_cpon_d0_s1 (attempt 1, throttled=False); 17 runs left, ~6.1 h
+[2026-11-01 00:12:25] done: S_np4_c4_lam0.088_cpon_d0.5_s1 (attempt 1, throttled=False); 16 runs left, ~5.7 h
+[2026-11-01 00:34:25] done: S_np4_c4_lam0.088_cpon_d1_s1 (attempt 1, throttled=False); 15 runs left, ~5.4 h
+[2026-11-01 00:56:27] done: S_np4_c4_lam0.088_cpon_d3_s1 (attempt 1, throttled=False); 14 runs left, ~5.0 h
+[2026-11-01 01:18:08] done: S_np4_c4_lam0.088_cpon_d3_s2 (attempt 1, throttled=False); 13 runs left, ~4.6 h
+[2026-11-01 01:39:31] done: S_np4_c4_lam0.088_cpon_d1_s2 (attempt 1, throttled=False); 12 runs left, ~4.3 h
+[2026-11-01 01:00:50] done: S_np4_c4_lam0.088_cpon_d0.5_s2 (attempt 1, throttled=False); 11 runs left, ~3.9 h
+[2026-11-01 01:22:10] done: S_np4_c4_lam0.088_cpon_d0_s2 (attempt 1, throttled=False); 10 runs left, ~3.6 h
+[2026-11-01 01:42:39] done: S_np4_c4_lam0.088_cpon_d0_s3 (attempt 1, throttled=False); 9 runs left, ~3.2 h
+[2026-11-01 02:03:08] done: S_np4_c4_lam0.088_cpon_d0.5_s3 (attempt 1, throttled=False); 8 runs left, ~2.9 h
+[2026-11-01 02:23:35] done: S_np4_c4_lam0.088_cpon_d1_s3 (attempt 1, throttled=False); 7 runs left, ~2.5 h
+[2026-11-01 02:44:15] done: S_np4_c4_lam0.088_cpon_d3_s3 (attempt 1, throttled=False); 6 runs left, ~2.1 h
+[2026-11-01 02:44:15] == E1-U: 6 runs (reusing 0 from earlier stages)
+[2026-11-01 03:06:22] done: U_np8_c4_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 5 runs left, ~1.8 h
+[2026-11-01 03:27:53] done: U_np8_c8_lam0.088_cpon_dvar_s1 (attempt 1, throttled=False); 4 runs left, ~1.4 h
+[2026-11-01 03:47:41] done: U_np8_c8_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 3 runs left, ~1.1 h
+[2026-11-01 04:09:10] done: U_np8_c4_lam0.088_cpon_dvar_s2 (attempt 1, throttled=False); 2 runs left, ~0.7 h
+[2026-11-01 04:30:33] done: U_np8_c4_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 1 runs left, ~0.4 h
+[2026-11-01 04:50:17] done: U_np8_c8_lam0.088_cpon_dvar_s3 (attempt 1, throttled=False); 0 runs left, ~0.0 h
+[2026-11-01 04:50:17] Fixed-concurrency baseline: c=8 (p99 acceptable: False)
+analysis: failed (le "/Users/yunxuanli/CSE 291/.venv/lib/python3.12/site-packages/pandas/core/apply.py", line 1183, in apply_series_generator
+    results[i] = self.func(v, *self.args, **self.kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: sequence item 2: expected str instance, float found)

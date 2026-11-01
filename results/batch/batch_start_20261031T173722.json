@@ -1,0 +1,7 @@
+{
+ "time": "2026-10-31T17:37:22.865292+00:00",
+ "batt": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=22413411)\t99%; finishing charge; 0:11 remaining present: true\n",
+ "settings": "System-wide power settings:\nCurrently in use:\n standby              1\n Sleep On Power Button 1\n hibernatefile        /var/vm/sleepimage\n powernap             1\n networkoversleep     0\n disksleep            10\n sleep                1 (sleep prevented by caffeinate, caffeinate, powerd, caffeinate, caffeinate, caffeinate)\n hibernatemode        3\n ttyskeepawake        1\n displaysleep         10\n tcpkeepalive         1\n lowpowermode         0\n womp                 1\n",
+ "therm": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+ "gate_problems": []
+}

@@ -1,0 +1,24 @@
+{
+ "therm_start": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+ "throttled": false,
+ "cold_start_s": 1.25,
+ "therm_end": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+ "valid": true,
+ "attempt": 1,
+ "experiment": "E1-S",
+ "spec": {
+  "series": "S",
+  "np": 4,
+  "ctx": 16384,
+  "c": 4,
+  "lam": 0.088,
+  "cache_prompt": true,
+  "tool_delay_s": null,
+  "seed": 2,
+  "n_tasks": 100,
+  "pilot": false,
+  "name": "S_np4_c4_lam0.088_cpon_dvar_s2"
+ },
+ "throttled_wait_s": 0.0,
+ "problems": []
+}
