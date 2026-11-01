@@ -14,7 +14,7 @@ from src.runner.monitor import MIN_INTERVAL_S, MacOSProbe, MemReading, SystemSam
 class FakeProbe:
     def __init__(self, platform="fake-os", readings=()):
         self.platform = platform
-        self.readings = list(readings)  # MemReading 或要抛出的异常
+        self.readings = list(readings)  # MemReading or an exception to raise
 
     def read(self, pid):
         r = self.readings.pop(0)
@@ -53,13 +53,13 @@ def test_failed_memory_probe_still_writes_a_row_with_error(tmp_path, fake_server
     [row] = rows(out)
     assert row["footprint_mb"] is None and row["rss_mb"] is None
     assert "footprint timed out" in row["error"]
-    assert row["platform"] == "fake-os"  # 平台标签不依赖这次读数成功
-    assert row["requests_processing"] == 0 and row["live_tokens"] == 7  # 其余字段照常采
+    assert row["platform"] == "fake-os"  # the platform label does not depend on this reading succeeding
+    assert row["requests_processing"] == 0 and row["live_tokens"] == 7  # the other fields are sampled as usual
 
 
 def test_unreachable_server_still_writes_a_row_with_error(tmp_path):
     probe = FakeProbe("fake-os", [MemReading(100.0, 90.0)])
-    sampler, out = make_sampler(tmp_path, "http://127.0.0.1:9", probe)  # 端口 9 无人监听
+    sampler, out = make_sampler(tmp_path, "http://127.0.0.1:9", probe)  # nobody listens on port 9
     sampler.tick()
     [row] = rows(out)
     assert row["footprint_mb"] == 100.0
@@ -104,9 +104,9 @@ def test_background_thread_samples_periodically_and_stop_joins(tmp_path, fake_se
     time.sleep(1.3)
     sampler.stop()
     n = len(rows(out))
-    assert 2 <= n <= 3  # t=0, 0.5, 1.0(机器忙时可能少一次)
+    assert 2 <= n <= 3  # t=0, 0.5, 1.0 (one fewer is possible when the machine is busy)
     time.sleep(0.7)
-    assert len(rows(out)) == n  # 停了就不再写
+    assert len(rows(out)) == n  # no more rows are written once stopped
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="footprint is macOS-only")

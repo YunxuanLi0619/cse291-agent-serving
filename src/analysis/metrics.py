@@ -1,12 +1,12 @@
-"""指标:全是纯函数,输入是已解析的日志行(list[dict]),不碰文件。
+"""Metrics: all pure functions over parsed log rows (list[dict]); they never touch files.
 
-口径(术语见 GLOSSARY.md;Goodput 定义里的「总时长」在这里取稳态窗口):
-- 稳态 = `warmup=false` 的 Task;分母永远是全部稳态 Task(失败和超时都算)。
-- 稳态窗口 = 最早到达到最晚完成,单位秒;吞吐和 goodput 都除以它。
-- 完成时间 = t_done - t_arrive,p50/p99 只统计 status=ok 的 Task;分位数用线性插值。
-- 吞吐 = ok Task 数 / 窗口(不要求 deadline 和 quality pass)。
-- goodput = (ok 且 quality_pass 且完成时间 ≤ deadline_s 的 Task 数) / 窗口。
-- 排队时间 = Task 日志的 queue_time_total,统计全部稳态 Task(过载时的超时 Task 排队最久,不能排除)。
+Definitions (terms are in GLOSSARY.md; the "total duration" in the Goodput definition is the steady-state window here):
+- Steady state = Tasks with `warmup=false`; the denominator is always all steady-state Tasks (failures and timeouts count).
+- Steady-state window = earliest arrival to latest completion, in seconds; throughput and goodput are both divided by it.
+- Completion time = t_done - t_arrive; p50/p99 count only Tasks with status=ok; percentiles use linear interpolation.
+- Throughput = number of ok Tasks / window (no deadline or quality-pass requirement).
+- Goodput = (number of Tasks that are ok, quality_pass and completed within deadline_s) / window.
+- Queue time = queue_time_total from the Task log, over all steady-state Tasks (timed-out Tasks queue longest under overload and cannot be excluded).
 """
 import math
 
@@ -47,11 +47,11 @@ def run_metrics(tasks: list[dict]) -> dict:
 
 
 def step_slice(requests: list[dict], tasks: list[dict]) -> list[dict]:
-    """agent Task 的第 k 步一行(代替单独的 E2)。只看稳态 agent Task 的 Request。
+    """One row per step k of agent Tasks (replaces a separate E2). Only Requests of steady-state agent Tasks are used.
 
-    fail_share = 该步 Request 里非 ok 的占比;时延类(ttft、latency、queue_wait)和 token 类只统计 ok Request;
-    reuse_ratio = Σcached_tokens / Σprompt_tokens(Prefix reuse 占 prompt 的比例)。
-    注意幸存者偏差:第 k 步只含走到第 k 步的 Task,中途失败的 Task 不出现在后面的步里,fail_share 是条件失败比例。
+    fail_share = share of non-ok Requests at that step; latency metrics (ttft, latency, queue_wait) and token metrics only count ok Requests;
+    reuse_ratio = sum(cached_tokens) / sum(prompt_tokens) (the share of the prompt covered by Prefix reuse).
+    Beware survivor bias: step k only contains Tasks that reached step k; Tasks that failed earlier do not appear in later steps, so fail_share is a conditional failure share.
     """
     agent_ids = {t["task_id"] for t in tasks if t["type"] == "agent"}
     by_k: dict[int, list[dict]] = {}
@@ -74,11 +74,11 @@ def step_slice(requests: list[dict], tasks: list[dict]) -> list[dict]:
 
 
 def peak_memory(system: list[dict]) -> tuple[float, float]:
-    """采样期间 footprint(主口径,ADR 0004)和 RSS(次口径)的最大值;采样失败的行(null)不参与。"""
+    """Maximum of footprint (primary metric, ADR 0004) and RSS (secondary) during sampling; rows where sampling failed (null) are ignored."""
     peak = lambda key: max((r[key] for r in system if r.get(key) is not None), default=NAN)  # noqa: E731
     return peak("footprint_mb"), peak("rss_mb")
 
 
 def kv_utilization(system: list[dict], budget_tokens: int) -> list[tuple[float, float]]:
-    """(t, live_tokens / B);live_tokens 缺失的采样行跳过。"""
+    """(t, live_tokens / B); sample rows with missing live_tokens are skipped."""
     return [(r["t"], r["live_tokens"] / budget_tokens) for r in system if r.get("live_tokens") is not None]

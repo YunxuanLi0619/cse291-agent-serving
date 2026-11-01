@@ -1,6 +1,6 @@
-"""Tokenizer 接口:给定 chat 消息,返回 llama-server 会报告的 prompt_tokens(含 chat template)。
+"""Tokenizer interface: given chat messages, return the prompt_tokens that llama-server would report (including the chat template).
 
-真实实现调 llama-server;测试用假实现(tests/fake_tokenizer.py)。
+The real implementation calls llama-server; tests use a fake (tests/fake_tokenizer.py).
 """
 from typing import Protocol
 
@@ -12,7 +12,7 @@ class Tokenizer(Protocol):
 
 
 class LlamaServerTokenizer:
-    """/apply-template 渲染 chat template,再用 /tokenize 计数(模板已含 BOS,所以不再加特殊 token)。"""
+    """/apply-template renders the chat template, then /tokenize counts (the template already contains BOS, so no extra special token is added)."""
 
     def __init__(self, base_url: str):
         self._client = httpx.Client(base_url=base_url, timeout=60)

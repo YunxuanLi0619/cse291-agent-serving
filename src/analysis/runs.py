@@ -1,8 +1,8 @@
-"""从原始日志目录读出所有已完成的 Run。
+"""Read all completed Runs from the raw log directory.
 
-Run 目录 = 含 manifest.json 与 tasks.jsonl 的目录(可嵌套);manifest 没有 `t_end` 的是中途崩了的 Run,跳过并报到 stderr。
-Run 级配置全部取自 manifest:`c`、`lambda`、`seed`、`server_cmdline`(解析出 np / B / 系列),
-可选的 `tool_delay_s`、`cache_prompt`(E3/E4 的批跑脚本写入;缺省为 None)。
+Run directory = a directory containing manifest.json and tasks.jsonl (may be nested); a manifest without `t_end` is a Run that crashed midway: skipped and reported on stderr.
+All Run-level configuration comes from the manifest: `c`, `lambda`, `seed`, `server_cmdline` (parsed into np / B / series),
+and the optional `tool_delay_s`, `cache_prompt` (written by the E3/E4 batch scripts; None by default).
 """
 import json
 import re
@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PLATFORM_ALIASES = {"darwin": "macos"}  # manifest.platform.system 与内存探针的平台标签对齐
+PLATFORM_ALIASES = {"darwin": "macos"}  # align manifest.platform.system with the memory probe's platform label
 
 
 @dataclass
@@ -36,7 +36,7 @@ def _flag(args: list[str], *names: str) -> int | None:
 
 
 def parse_server_config(cmdline: str | None) -> dict:
-    """np、B(= -c,ADR 0002)、系列(S = --no-kv-unified,U = -kvu);读不到的为 None。"""
+    """np, B (= -c, ADR 0002), series (S = --no-kv-unified, U = -kvu); None if it cannot be read."""
     args = cmdline.split() if cmdline else []
     series = "S" if "--no-kv-unified" in args else "U" if {"-kvu", "--kv-unified"} & set(args) else None
     return {"np": _flag(args, "-np", "--parallel"), "B": _flag(args, "-c", "--ctx-size"), "series": series}

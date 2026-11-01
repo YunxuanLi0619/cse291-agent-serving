@@ -1,4 +1,4 @@
-"""Tokenizer 接口的假实现:每个词 1 token,每条消息 + 固定模板开销。"""
+"""Fake implementation of the Tokenizer interface: 1 token per word, plus a fixed template overhead per message."""
 TEMPLATE_OVERHEAD = 32
 
 

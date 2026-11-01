@@ -29,19 +29,19 @@ class Handle:
 
 
 class Fake:
-    """批跑驱动的全部副作用:电源/热命令、server、runner。runner 直接写合成的 Run 目录。"""
+    """All side effects of the batch driver: power/thermal commands, server, runner. The runner directly writes synthetic Run directories."""
 
     def __init__(self):
         self.batt, self.therm, self.sleeps = [BATT_AC], [NO_THERM], []
         self.started, self.ran, self.stopped = [], [], 0
-        self.bad_runs: dict[str, int] = {}  # 名字 → 前几次产出残缺数据
+        self.bad_runs: dict[str, int] = {}  # name → the first few times produce incomplete data
         self.raise_in_runner: set[str] = set()
         self.server_dies = False
-        self.cached_tokens = None  # None = 按 cache_prompt 自动
+        self.cached_tokens = None  # None = automatic, following cache_prompt
 
     @staticmethod
     def _next(seq):
-        return seq.pop(0) if len(seq) > 1 else seq[0]  # 最后一个值一直重复
+        return seq.pop(0) if len(seq) > 1 else seq[0]  # the last value repeats forever
 
     def hooks(self, **override) -> Hooks:
         h = dict(batt=lambda: self._next(self.batt), settings=lambda: SETTINGS, therm=lambda: self._next(self.therm),
@@ -95,8 +95,8 @@ def test_runs_every_stage_with_its_pilot_first_and_records_the_batch_start_envir
     fake = Fake()
     assert make(tmp_path, fake).run() == 0
     assert done(tmp_path) == sorted(plan_names())
-    assert fake.stopped == len(fake.started)  # 每个 Run 前启动、跑完关闭,没有留下 server
-    for st in build_plan(CFG):  # 本 Stage 的试跑先于它的任何全量 Run
+    assert fake.stopped == len(fake.started)  # started before each Run and closed after it, no server left behind
+    for st in build_plan(CFG):  # this Stage's pilot comes before any of its full Runs
         pilot_at = fake.ran.index(st.pilot.name)
         assert all(fake.ran.index(r.name) > pilot_at for r in st.runs)
         assert (tmp_path / f"results/batch/pilots/{st.experiment}/{st.pilot.name}/batch_meta.json").exists()
@@ -111,7 +111,7 @@ def test_resume_skips_completed_runs_and_reruns_only_the_missing_one(tmp_path):
     make(tmp_path, Fake()).run()
     again = Fake()
     assert make(tmp_path, again).run() == 0
-    assert again.started == [] and again.ran == []  # 试跑也不重做
+    assert again.started == [] and again.ran == []  # pilots are not redone either
     victim = plan_names()[5]
     shutil.rmtree(tmp_path / "results/raw/batch" / victim)
     third = Fake()
@@ -146,7 +146,7 @@ def test_a_run_that_keeps_failing_is_recorded_as_failed_and_the_batch_moves_on(t
     fake = Fake()
     name = plan_names(only=["E1-S"])[2]
     fake.bad_runs[name] = 99
-    assert make(tmp_path, fake, only=["E1-S"], max_attempts=2).run() == 1  # 有失败的 Run → 非 0 退出
+    assert make(tmp_path, fake, only=["E1-S"], max_attempts=2).run() == 1  # a failed Run → non-zero exit
     assert fake.ran.count(name) == 2
     assert set(done(tmp_path)) == set(plan_names(only=["E1-S"])) - {name}
     assert name in state(tmp_path)["failed_runs"]
@@ -177,7 +177,7 @@ def test_a_stage_whose_pilot_fails_is_blocked_and_its_full_runs_never_start(tmp_
     assert not ({r.name for r in e4.runs} & set(fake.ran))
     assert fake.ran.count(e4.pilot.name) == 2
     assert list(state(tmp_path)["blocked_stages"]) == ["E4"]
-    assert set(plan_names(only=["E3"])) <= set(done(tmp_path))  # 其它 Stage 照常跑完
+    assert set(plan_names(only=["E3"])) <= set(done(tmp_path))  # the other Stages finish as usual
 
 
 def test_pilot_must_log_cached_tokens_for_the_cache_experiment(tmp_path):
@@ -197,7 +197,7 @@ def test_pilot_must_log_cached_tokens_for_the_cache_experiment(tmp_path):
 
 def test_pilot_records_whether_cache_prompt_off_really_stopped_prefix_reuse(tmp_path):
     fake = Fake()
-    fake.cached_tokens = 30  # 关了 cache_prompt 还有复用:E4 的前提有问题,但这是发现,不是批跑故障
+    fake.cached_tokens = 30  # there is still reuse with cache_prompt off: E4's premise is flawed, but that is a finding, not a batch failure
     make(tmp_path, fake, only=["E4"]).run()
     pilot = build_plan(CFG)[1].pilot
     meta = json.loads((tmp_path / f"results/batch/pilots/E4/{pilot.name}/batch_meta.json").read_text())
@@ -206,7 +206,7 @@ def test_pilot_records_whether_cache_prompt_off_really_stopped_prefix_reuse(tmp_
 
 def test_waits_for_ac_power_between_runs_instead_of_running_on_battery(tmp_path):
     fake = Fake()
-    fake.batt = [BATT_AC, BATT_BAT, BATT_BAT, BATT_BAT, BATT_AC]  # 批跑开始时插着,第一个 Run 前被拔掉,几分钟后插回
+    fake.batt = [BATT_AC, BATT_BAT, BATT_BAT, BATT_BAT, BATT_AC]  # plugged in when the batch starts, unplugged before the first Run, plugged back in a few minutes later
     make(tmp_path, fake, only=["E1-S"], power_poll_s=60).run()
     assert fake.sleeps.count(60) >= 2
     assert set(done(tmp_path)) == set(plan_names(only=["E1-S"]))
@@ -216,7 +216,7 @@ def test_a_run_that_ends_on_battery_is_invalid(tmp_path):
     fake = Fake()
     reads = {"n": 0}
 
-    def batt():  # 读数:批跑开始 1、门禁 2、Run 结束 3……让第 3 次读到电池 = 第一个 Run 结束时
+    def batt():  # readings: batch start 1, gate 2, Run end 3…; so the 3rd reading hitting battery = at the end of the first Run
         reads["n"] += 1
         return BATT_BAT if reads["n"] == 3 else BATT_AC
 
@@ -227,9 +227,9 @@ def test_a_run_that_ends_on_battery_is_invalid(tmp_path):
 
 def test_throttling_before_a_run_is_waited_out_up_to_a_cap_and_flagged_in_the_run_meta(tmp_path):
     fake = Fake()
-    fake.therm = [HOT]  # 一直降频
+    fake.therm = [HOT]  # throttled all the time
     make(tmp_path, fake, only=["E1-S"], cooldown_max_s=120, cooldown_poll_s=30).run()
-    assert fake.sleeps.count(30) >= 4  # 先等满上限再开跑,不无限等
+    assert fake.sleeps.count(30) >= 4  # waits up to the limit before starting, and does not wait forever
     meta = json.loads((tmp_path / "results/raw/batch" / plan_names(only=["E1-S"])[0] / "batch_meta.json").read_text())
     assert meta["throttled"] is True and meta["therm_start"] == HOT
 
@@ -259,7 +259,7 @@ def test_pilots_only_runs_one_pilot_per_stage_and_no_full_run(tmp_path):
     assert make(tmp_path, fake, pilots_only=True).run() == 0
     assert fake.ran == [st.pilot.name for st in build_plan(CFG)]
     assert not any((tmp_path / "results/raw/batch").iterdir())
-    make(tmp_path, fake).run()  # 之后的正式批跑不重做已通过的试跑
+    make(tmp_path, fake).run()  # later official batches do not redo pilots that already passed
     assert [st.pilot.name for st in build_plan(CFG)] == fake.ran[:5] and fake.ran.count(build_plan(CFG)[0].pilot.name) == 1
 
 
@@ -306,7 +306,7 @@ def test_a_leftover_destination_without_completion_marker_does_not_block_the_fin
 
 def test_summary_flags_reused_runs_that_are_missing_and_baseline_flags_incomplete_data(tmp_path):
     fake = Fake()
-    victim = [r.name for r in build_plan(CFG)[0].runs if r.c == 4][0]  # E1-S c=4:E4 和 E5 都复用它
+    victim = [r.name for r in build_plan(CFG)[0].runs if r.c == 4][0]  # E1-S c=4: reused by both E4 and E5
     fake.bad_runs[victim] = 99
     make(tmp_path, fake, max_attempts=1).run()
     summary = json.loads((tmp_path / "results/batch/summary.json").read_text())

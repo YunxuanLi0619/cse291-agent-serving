@@ -1,7 +1,7 @@
-"""每次 Run 的 manifest.json:复现和审计所需的信息。
+"""manifest.json of each Run: the information needed for reproduction and audit.
 
-某个字段读不到时置 null 并把原因写进 `errors`,不丢字段、不让整个 Run 起不来。
-`run_cmd` 只用于依赖本机的命令(ps、pmset),测试里注入假实现;git 命令直接真跑。
+If a field cannot be read it is set to null and the reason is written to `errors`; fields are never dropped and the whole Run is not prevented from starting.
+`run_cmd` is used only for commands that depend on this machine (ps, pmset) and a fake is injected in tests; git commands are really run.
 """
 import hashlib
 import platform
@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
-RunCmd = Callable[[list[str]], str]  # 执行命令返回 stdout,失败抛异常
+RunCmd = Callable[[list[str]], str]  # run a command and return stdout; raise an exception on failure
 
 
 def default_run_cmd(argv: list[str]) -> str:
@@ -31,7 +31,7 @@ def git_head(repo_dir: Path) -> str:
 
 
 def git_dirty(repo_dir: Path) -> bool:
-    # results/ 里是各次 Run 的输出,不算代码改动
+    # results/ holds the output of each Run and does not count as a code change
     return bool(default_run_cmd(["git", "-C", str(repo_dir), "status", "--porcelain", "--", ".", ":!results"]).strip())
 
 

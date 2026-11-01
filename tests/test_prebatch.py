@@ -25,7 +25,7 @@ def test_picks_clearly_faster_stable_candidate():
     results = {
         4: _cfg([4.3, 4.4, 4.3], [35, 35.5, 35.2], [32.0, 32.4]),
         8: _cfg([4.3, 4.3, 4.4], [35, 35.2, 35.1], [32.8, 32.5]),
-        10: _cfg([3.7, 3.8, 3.7], [30.5, 30.8, 30.6], [37.5, 37.9]),  # 约 +15%
+        10: _cfg([3.7, 3.8, 3.7], [30.5, 30.8, 30.6], [37.5, 37.9]),  # about +15%
     }
     d = decide_threads(results)
     assert d["threads"] == 10
@@ -35,7 +35,7 @@ def test_picks_clearly_faster_stable_candidate():
 def test_skips_faster_candidate_whose_runs_are_unstable():
     results = {
         8: _cfg([4.3, 4.3, 4.4], [35, 35.2, 35.1], [32.8, 32.5]),
-        10: _cfg([2.6, 4.2, 5.2], [22, 40, 31], [37.5, 37.9]),  # 均值快,但 3 次差一倍
+        10: _cfg([2.6, 4.2, 5.2], [22, 40, 31], [37.5, 37.9]),  # fast on average, but the 3 runs differ by 2x
     }
     d = decide_threads(results)
     assert d["threads"] == 8
@@ -46,7 +46,7 @@ OLD = {"short": 4.3, "longctx": 35.0, "longgen": 22.5, "agent_per_step_s": 8.05}
 
 
 def test_small_t_solo_drift_keeps_the_calibration():
-    new = {"short": 4.0, "longctx": 31.0, "longgen": 22.0, "agent_per_step_s": 8.5}  # 最大偏差 -11.4%
+    new = {"short": 4.0, "longctx": 31.0, "longgen": 22.0, "agent_per_step_s": 8.5}  # maximum deviation -11.4%
     r = compare_t_solo(OLD, new)
     assert r["recalibrate"] is False
     assert r["exceeded"] == []
@@ -61,7 +61,7 @@ def test_t_solo_deviation_over_15pct_in_any_type_triggers_recalibration():
 
 
 def test_budget_reproduces_step_55_numbers():
-    # 来自 lab-notebook 5.5-B:S̄=20.26 s、P_eff=1.5、μ≈0.074、λ 网格 {0.022,0.044,0.067,0.089}
+    # from lab-notebook 5.5-B: S̄=20.26 s, P_eff=1.5, μ≈0.074, λ grid {0.022,0.044,0.067,0.089}
     mix = {"short": 0.4, "longctx": 0.2, "longgen": 0.2, "agent": 0.2}
     b = budget(OLD, mix, p_eff=1.5)
     assert round(b["mean_service_s"], 2) == 20.26

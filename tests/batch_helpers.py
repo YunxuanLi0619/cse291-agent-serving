@@ -4,7 +4,7 @@ from src.batch.plan import RunSpec
 
 
 def write_run(d, n=5, *, sample_gap=0.5, error_rows=0, warmup=3, statuses=None, manifest=None, cached=0, spec: RunSpec | None = None):
-    """合成一个 Run 目录(与 runner 的产出同形),用来测校验、批跑驱动和汇总。"""
+    """Synthesize a Run directory (same shape as the runner's output) for testing validation, the batch driver and summaries."""
     d.mkdir(parents=True, exist_ok=True)
     m = {"t_end": 10.0, "errors": {}, "cold_start_s": 2.0, "power_source": "AC Power", "low_power_mode": False,
          "cache_prompt": True, "tool_delay_s": None, "c": 4, "lambda": 0.088, "seed": 1,

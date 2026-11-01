@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Step 5.3/5.4: 对每种 server 配置记录 KV buffer、/slots 的 n_ctx、空闲 RSS 与 footprint。
-# 用法: scripts/step5_mem_configs.sh   (输出到 results/raw/step5/)
+# Step 5.3/5.4: for each server configuration, record the KV buffer, n_ctx from /slots, idle RSS and footprint.
+# Usage: scripts/step5_mem_configs.sh   (output to results/raw/step5/)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 OUT=results/raw/step5; mkdir -p "$OUT"

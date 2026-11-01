@@ -1,14 +1,14 @@
-"""会 sleep 的假 llama-server:流式响应,最后一个数据 chunk 带 timings。
+"""A fake llama-server that sleeps: streaming responses, with timings on the last data chunk.
 
-故障注入:给 `fault` 赋一个 `(请求体, 第几个请求) -> dict | None` 的函数,返回值之一:
-  {"kind": "http", "status": 503}           普通 HTTP 错误
-  {"kind": "ctx_exceeded"}                  400 exceed_context_size_error(单个请求超过 slot 容量)
-  {"kind": "pool_exhausted"}                500 "Context size has been exceeded."(共享池耗尽)
-  {"kind": "slow", "ttft_s": 2.0}           首个 token 前 sleep(模拟长 prefill;期间不检测客户端断连)
-  {"kind": "disconnect", "after_chunks": 3} 发完若干数据 chunk 后直接断开,不发 [DONE]
-  {"kind": "stream_pool_exhausted", "after_chunks": 3}  已发过 chunk 后池耗尽:HTTP 200 + SSE error 事件
-  {"kind": "garbage", "after_chunks": 3}    发完若干数据 chunk 后发一行坏 JSON
-  {"kind": "no_key"}                        正常完成,但回答里不含 key(模拟模型没复述出来)
+Fault injection: assign `fault` a function `(request body, index of this request) -> dict | None`; the return value is one of:
+  {"kind": "http", "status": 503}           ordinary HTTP error
+  {"kind": "ctx_exceeded"}                  400 exceed_context_size_error (a single request exceeds the slot capacity)
+  {"kind": "pool_exhausted"}                500 "Context size has been exceeded." (shared pool exhausted)
+  {"kind": "slow", "ttft_s": 2.0}           sleep before the first token (simulates a long prefill; client disconnects are not detected meanwhile)
+  {"kind": "disconnect", "after_chunks": 3} disconnect right after sending some data chunks, without sending [DONE]
+  {"kind": "stream_pool_exhausted", "after_chunks": 3}  pool exhausted after chunks were already sent: HTTP 200 + SSE error event
+  {"kind": "garbage", "after_chunks": 3}    send a line of bad JSON after some data chunks
+  {"kind": "no_key"}                        completes normally, but the answer does not contain the key (simulates the model failing to repeat it)
 """
 import json
 import re
@@ -35,12 +35,12 @@ class FakeServer:
         self.ttft_s, self.chunk_interval_s, self.n_slots = ttft_s, chunk_interval_s, n_slots
         self.fault = None
         self.max_in_flight = 0
-        self.deferred = 0  # /metrics 里报告的 requests_deferred,测试直接赋值
-        self.aborted = 0  # 客户端中途断开、写回时才发现的请求数
+        self.deferred = 0  # requests_deferred reported in /metrics; tests assign it directly
+        self.aborted = 0  # number of requests where the client disconnected midway, noticed only on write-back
         self._in_flight = 0
         self._lock = threading.Lock()
         self.ready_at = time.monotonic() + health_delay_s
-        self.requests: list[dict] = []  # 收到的 chat 请求体,供测试断言
+        self.requests: list[dict] = []  # chat request bodies received, for test assertions
         self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
 
@@ -120,7 +120,7 @@ class FakeServer:
             def _stream(self, body, fault):
                 messages, max_tokens = body["messages"], body["max_tokens"]
                 text = "\n".join(m["content"] for m in messages)
-                found = NEEDLE_RE.search(text)  # 回答 = 对话里出现的第一个 key
+                found = NEEDLE_RE.search(text)  # the answer = the first key appearing in the conversation
                 answer = found.group(0) if found and fault.get("kind") != "no_key" else "unknown"
                 pieces = [answer] + ["."] * (max_tokens - 1)
                 time.sleep(fault.get("ttft_s", server.ttft_s))

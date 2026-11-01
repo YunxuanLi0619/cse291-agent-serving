@@ -1,4 +1,4 @@
-"""Scheduler:持有就绪 Step 的队列和并发上限 c;Policy 只决定「下一个派发哪个」。"""
+"""Scheduler: owns the queue of ready Steps and the concurrency limit c; the Policy only decides "which to dispatch next"."""
 import asyncio
 from dataclasses import dataclass, field
 from typing import Callable, Protocol, Sequence
@@ -9,13 +9,13 @@ class ReadyStep:
     task_id: str
     step: int
     ready_at: float
-    seq: int  # 入队序号,就绪时刻并列时用来保持先入先出
+    seq: int  # enqueue sequence number, used to keep first-in-first-out when ready times tie
     started_at: float | None = None
-    held: bool = False  # 正占着一个并发名额
+    held: bool = False  # currently holding a concurrency slot
     granted: asyncio.Event = field(default_factory=asyncio.Event)
 
     def queue_time(self, now: float) -> float:
-        """已排队时长;还没派发(如排队中超时)则算到 now。"""
+        """Time spent queued; if not yet dispatched (e.g. timed out while queued), counted up to now."""
         return (self.started_at if self.started_at is not None else now) - self.ready_at
 
 
@@ -46,7 +46,7 @@ class Scheduler:
         return entry
 
     def finish(self, entry: ReadyStep) -> None:
-        """Step 结束、被取消或排队中超时都走这里;幂等地释放它占的队位或并发名额。"""
+        """A Step finishing, being cancelled, or timing out while queued all go through here; idempotently releases the queue position or concurrency slot it holds."""
         if entry in self._ready:
             self._ready.remove(entry)
         elif entry.held:

@@ -19,7 +19,7 @@ def test_parse_server_log_pairs_each_selection_with_its_launch():
 
 def test_join_requests_matches_by_start_order_and_flags_agent_slot_change():
     launches = parse_server_log(LOG.splitlines())
-    requests = [  # 故意乱序:按 t_start 对应
+    requests = [  # deliberately out of order: matched by t_start
         {"task_id": "t2", "step": 1, "t_start": 9.0, "cached_tokens": 0},
         {"task_id": "t1", "step": 1, "t_start": 1.0, "cached_tokens": 0, "status": "ok",
          "prompt_tokens": 800, "output_tokens": 128},
@@ -43,10 +43,10 @@ def test_join_requests_refuses_when_counts_differ():
 
 
 def test_join_requests_rejects_pairing_whose_token_counts_disagree_with_server_release():
-    launches = parse_server_log(LOG.splitlines())  # 第 1 个 launch 释放时 n_tokens = 928
+    launches = parse_server_log(LOG.splitlines())  # when the 1st launch is released n_tokens = 928
     requests = [
         {"task_id": "a", "step": 1, "t_start": 1.0, "cached_tokens": 0, "status": "ok",
-         "prompt_tokens": 500, "output_tokens": 128},  # 500+128 ≠ 928:顺序对错了
+         "prompt_tokens": 500, "output_tokens": 128},  # 500+128 ≠ 928: the order is wrong
         {"task_id": "b", "step": 1, "t_start": 2.0, "cached_tokens": 0},
         {"task_id": "c", "step": 1, "t_start": 3.0, "cached_tokens": 0},
     ]

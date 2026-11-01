@@ -63,13 +63,13 @@ def test_every_task_has_needle_steps_and_deadline(tmp_path):
     assert all(len(t["steps"]) == 1 for t in wl["tasks"] if t["type"] != "agent")
     assert {s["max_tokens"] for t in tasks_of(wl, "short") for s in t["steps"]} == {64}
     assert {s["max_tokens"] for t in tasks_of(wl, "longgen") for s in t["steps"]} == {512}
-    # 只有 agent 的非末步有 Tool delay,取值 0.2–3 s
+    # only non-final steps of agents have a Tool delay, with values 0.2–3 s
     delays = [s["delay_after_s"] for t in tasks_of(wl, "agent") for s in t["steps"][:-1]]
     assert all(0.2 <= d <= 3.0 for d in delays)
 
 
 def test_deadline_is_five_times_t_solo_from_input_table(tmp_path):
-    table = tmp_path / "t_solo.json"  # 自带固定的表:configs/t_solo.json 每次重新校准都会变
+    table = tmp_path / "t_solo.json"  # bring a fixed table: configs/t_solo.json changes with every recalibration
     table.write_text(json.dumps({"short": 4.3, "longctx": 35.0, "longgen": 22.5, "agent_per_step_s": 8.05}))
     out = tmp_path / "w.json"
     main(["--mix", str(CONFIGS / "mix_dev.json"), "--t-solo", str(table), "--seed", "1",
@@ -78,7 +78,7 @@ def test_deadline_is_five_times_t_solo_from_input_table(tmp_path):
     assert {t["deadline_s"] for t in tasks_of(wl, "short")} == {21.5}
     assert {t["deadline_s"] for t in tasks_of(wl, "longctx")} == {175.0}
     assert {t["deadline_s"] for t in tasks_of(wl, "longgen")} == {112.5}
-    for t in tasks_of(wl, "agent"):  # 5 × (每步 8.05 s × 步数 + Σ Tool delay)
+    for t in tasks_of(wl, "agent"):  # 5 × (8.05 s per step × number of steps + Σ Tool delay)
         total_delay = sum(s["delay_after_s"] for s in t["steps"][:-1])
         assert t["deadline_s"] == pytest.approx(5 * (8.05 * len(t["steps"]) + total_delay), abs=1e-3)
 
@@ -96,7 +96,7 @@ def test_arrival_gaps_are_unit_rate_exponential(tmp_path):
     wl = load(gen(tmp_path, "w.json", n_tasks=3000))
     gaps = [t["unit_gap_s"] for t in wl["tasks"]]
     assert all(g > 0 for g in gaps)
-    assert sum(gaps) / len(gaps) == pytest.approx(1.0, rel=0.1)  # λ=1 → 均值 1 s
+    assert sum(gaps) / len(gaps) == pytest.approx(1.0, rel=0.1)  # λ=1 → mean 1 s
 
 
 TARGETS = {"short": 256, "longctx": 3000, "longgen": 256, "agent": 800}
@@ -112,7 +112,7 @@ def test_prompt_tokens_of_every_task_are_within_5_percent_of_target(tmp_path):
 
 
 class CoarseTokenizer:
-    """token 数只按 100 一档变化 → 256 的 ±5% 区间(243–268)内没有任何可达值。"""
+    """Token counts change only in steps of 100 → no reachable value lies within the ±5% interval (243–268) of 256."""
 
     def prompt_tokens(self, messages):
         return -(-FakeTokenizer().prompt_tokens(messages) // 100) * 100
@@ -142,13 +142,13 @@ def test_fixed_tool_delay_variant_changes_only_delays_and_agent_deadlines(tokeni
     wl = generate_workload(mix, t_solo, seed=1, n_tasks=30, tokenizer=tokenizer)
     v = with_fixed_tool_delay(wl, 3.0)
     assert v["tool_delay_s"] == 3.0
-    assert "tool_delay_s" not in wl  # 不改原对象
+    assert "tool_delay_s" not in wl  # the original object is not modified
     for old, new in zip(wl["tasks"], v["tasks"]):
         assert [s["user_content"] for s in old["steps"]] == [s["user_content"] for s in new["steps"]]
         assert (old["task_id"], old["unit_gap_s"], old["needle"]) == (new["task_id"], new["unit_gap_s"], new["needle"])
         delays = [s["delay_after_s"] for s in new["steps"]]
-        assert delays == [3.0] * (len(delays) - 1) + [None]  # 最后一步没有 delay
-        if old["type"] == "agent":  # deadline = 5 × (每步 6.0 s × 步数 + Σdelay),用 workload 自带的 t_solo 表
+        assert delays == [3.0] * (len(delays) - 1) + [None]  # the last step has no delay
+        if old["type"] == "agent":  # deadline = 5 × (6.0 s per step × number of steps + Σdelay), using the workload's own t_solo table
             assert new["deadline_s"] == 5 * (6.0 * len(delays) + 3.0 * (len(delays) - 1))
         else:
             assert new["deadline_s"] == old["deadline_s"]

@@ -1,14 +1,14 @@
-"""批跑驱动(#9):按 plan 逐个 Run 执行,可分批过夜、可恢复。
+"""Batch driver (#9): execute the Runs of the plan one by one, resumable and splittable over several overnight batches.
 
-目录(root 下):
-  results/raw/batch/<run>/        已完成且通过校验的 Run(分析读这里);存在即视为完成,恢复时跳过
-  results/batch/running/<run>/    正在跑的 Run;启动时发现残留 = 上次被打断,挪到 invalid 后重跑
-  results/batch/pilots/<E>/<run>/ 每个实验的 30 Task 试跑
-  results/batch/invalid/<run>__<时间>/  校验没过的尝试(含 problems.json),保留作证据
-  results/batch/state.json        失败的 Run、被试跑拦下的实验
-  results/batch/batch_start_<时间>.json  每批开始前的电源、低电量模式、pmset -g therm
+Directories (under root):
+    results/raw/batch/<run>/        completed Runs that passed validation (analysis reads here); existing = done, skipped on resume
+    results/batch/running/<run>/    Runs in progress; a leftover found at start = interrupted last time, moved to invalid and rerun
+    results/batch/pilots/<E>/<run>/ the 30-Task pilot of each experiment
+    results/batch/invalid/<run>__<time>/  attempts that failed validation (with problems.json), kept as evidence
+    results/batch/state.json        failed Runs and experiments blocked by their pilots
+    results/batch/batch_start_<time>.json  power, low-power mode and pmset -g therm before each batch
 
-所有副作用(pmset、server、runner、睡眠)经 Hooks 注入,测试里全是假的。
+All side effects (pmset, server, runner, sleeping) are injected through Hooks and are all fakes in the tests.
 """
 import json
 import os
@@ -24,7 +24,7 @@ from .baseline import select_baseline
 from .checks import gate_problems, is_throttled, validate_run
 from .plan import RunSpec, Stage, build_plan
 
-EXIT_REFUSED = 3  # 门禁不过,拒绝启动
+EXIT_REFUSED = 3  # gate failed, refuse to start
 MAX_ATTEMPTS = 3
 PILOT_ATTEMPTS = 2
 POWER_POLL_S = 60
@@ -47,9 +47,9 @@ class Hooks:
     settings: Callable[[], str]
     therm: Callable[[], str]
     sleep: Callable[[float], None]
-    start_server: Callable[[RunSpec, Path], ServerHandle]  # (spec, server.log 路径),启动失败抛异常
-    run_runner: Callable[[RunSpec, Path, ServerHandle], int]  # 返回 runner 退出码
-    smoke_analysis: Callable[[Path], list[str]]  # 试跑后用分析命令读一遍,返回问题
+    start_server: Callable[[RunSpec, Path], ServerHandle]  # (spec, server.log path); raises if the start fails
+    run_runner: Callable[[RunSpec, Path, ServerHandle], int]  # returns the runner exit code
+    smoke_analysis: Callable[[Path], list[str]]  # after a pilot, read it back with the analysis command and return the problems
 
 
 def _stamp() -> str:
@@ -65,8 +65,8 @@ class Batch:
         self.cfg, self.root, self.h, self.only = cfg, Path(root), hooks, only
         self.max_attempts, self.pilot_attempts = max_attempts, pilot_attempts
         self.power_poll_s, self.cooldown_poll_s, self.cooldown_max_s = power_poll_s, cooldown_poll_s, cooldown_max_s
-        self.pilots_only = pilots_only  # 只做各实验的 30 Task 试跑(无人值守前当面验证真实流水线)
-        self.therm_sample_s = therm_sample_s  # 0 = 不开后台采样线程(测试)
+        self.pilots_only = pilots_only  # only the 30-Task pilots of each experiment (verify the real pipeline in person before going unattended)
+        self.therm_sample_s = therm_sample_s  # 0 = no background sampling thread (tests)
         self._log = log
         self.raw = self.root / "results/raw/batch"
         self.work = self.root / "results/batch"
@@ -77,7 +77,7 @@ class Batch:
         self._log(f"[{datetime.now().strftime('%F %T')}] {msg}")
 
     def _read(self, fn: Callable[[], str], what: str) -> str:
-        """pmset 偶尔超时或失败:读不到当成空串(门禁会按「读不到」处理),不让批跑崩掉。"""
+        """pmset occasionally times out or fails: what cannot be read counts as an empty string (the gate treats it as "unreadable") so the batch does not crash."""
         try:
             return fn()
         except Exception as e:
@@ -93,7 +93,7 @@ class Batch:
     def _therm(self) -> str:
         return self._read(self.h.therm, "pmset -g therm")
 
-    # ---- 入口 ----
+    # ---- entry point ----
     def run(self) -> int:
         for d in (self.raw, self.work / "running", self.work / "pilots", self.work / "invalid"):
             d.mkdir(parents=True, exist_ok=True)
@@ -150,7 +150,7 @@ class Batch:
         self.log(f"pilot failed, {stage.experiment} is blocked: {self.state['blocked_stages'][stage.experiment]}")
         return False
 
-    # ---- 单个 Run ----
+    # ---- a single Run ----
     def _attempt_until_valid(self, spec: RunSpec, dest_root: Path, attempts: int, stage: Stage) -> bool:
         for attempt in range(1, attempts + 1):
             self._wait_for_ac()
@@ -175,9 +175,9 @@ class Batch:
                         throttled_wait_s=throttled_wait, problems=[])
             (running / "batch_meta.json").write_text(json.dumps(meta, indent=1, default=str))
             dest = dest_root / spec.name
-            if dest.exists():  # 没有完成标记的残留(上次崩在改名前后):挪开,不让它挡住刚跑完的有效结果
+            if dest.exists():  # leftover without a completion marker (crashed around the rename last time): move it aside so it does not block the valid result just produced
                 self._move_invalid(dest, ["stale destination without batch_meta.json"])
-            os.replace(running, dest)  # 同一文件系统上的原子改名:出现在 dest = 完成
+            os.replace(running, dest)  # atomic rename on the same filesystem: appearing at dest = completed
             self.log(f"done: {spec.name} (attempt {attempt}, throttled={meta['throttled']}); {self._eta()}")
             return True
         return False
@@ -198,7 +198,7 @@ class Batch:
                 problems.append(f"runner exited with code {rc}")
             if not handle.alive():
                 problems.append("server died during the run")
-        except Exception as e:  # 启动失败、runner 异常:这次尝试作废,批跑继续
+        except Exception as e:  # start failure or runner exception: this attempt is void, the batch continues
             problems.append(f"{type(e).__name__}: {e}")
         finally:
             if sampler:
@@ -209,13 +209,13 @@ class Batch:
         meta["therm_end"] = self._therm()
         meta["throttled"] = meta["throttled"] or is_throttled(meta["therm_end"])
         problems += [f"at end: {p}" for p in gate_problems(self._batt(), self._settings())]
-        try:  # runner 被杀后 manifest / JSONL 可能写了一半:这次尝试作废,不能让异常把整个批跑带走
+        try:  # after the runner is killed the manifest / JSONL may be half written: this attempt is void and an exception must not take down the whole batch
             problems += validate_run(run_dir, spec.n_tasks)
         except Exception as e:
             problems.append(f"validation crashed: {type(e).__name__}: {e}")
         return problems, meta
 
-    # ---- 试跑特有检查 ----
+    # ---- pilot-specific checks ----
     def _pilot_problems(self, spec: RunSpec, run_dir: Path) -> list[str]:
         from src.analysis.runs import read_jsonl
         problems = self.h.smoke_analysis(run_dir)
@@ -231,13 +231,13 @@ class Batch:
 
     @staticmethod
     def _cache_off_effective(spec: RunSpec, run_dir: Path) -> bool | None:
-        """cache_prompt=false 时 cached_tokens 应全为 0;不是 0 就是 E4 的前提有问题(只记录,不拦)。"""
+        """With cache_prompt=false, cached_tokens should all be 0; otherwise the premise of E4 is broken (recorded only, not blocking)."""
         if spec.cache_prompt:
             return None
         from src.analysis.runs import read_jsonl
         return all((r.get("cached_tokens") or 0) == 0 for r in read_jsonl(run_dir / "requests.jsonl"))
 
-    # ---- 等待 ----
+    # ---- waiting ----
     def _wait_for_ac(self) -> None:
         waited = False
         while problems := gate_problems(self._batt(), self._settings()):
@@ -247,7 +247,7 @@ class Batch:
             self.h.sleep(self.power_poll_s)
 
     def _cool_down(self) -> tuple[str, float]:
-        """降频中就等一会儿(有上限,不无限等);返回开跑前的 therm 文本和等待秒数。"""
+        """If throttled, wait a while (bounded, never forever); return the therm text from before the start and the seconds waited."""
         waited, therm = 0.0, self._therm()
         while is_throttled(therm) and waited < self.cooldown_max_s:
             self.h.sleep(self.cooldown_poll_s)
@@ -255,7 +255,7 @@ class Batch:
             therm = self._therm()
         return therm, waited
 
-    # ---- 整理 ----
+    # ---- tidying up ----
     def _move_invalid(self, d: Path, problems: list[str]) -> None:
         dest = self.work / "invalid" / f"{d.name}__{_stamp()}"
         n = 0
@@ -295,7 +295,7 @@ class Batch:
         summary = {"planned": len(planned), "done": len(metas), **{k: self.state[k] for k in ("failed_runs", "blocked_stages")},
                    "throttled_runs": sorted(n for n, m in metas.items() if m["throttled"]),
                    "retried_runs": {n: m["attempt"] for n, m in metas.items() if m["attempt"] > 1},
-                   # E4 的 cache_prompt=on、E5 的 λ=0.9μ 复用 E1-S 的 Run;那几个 Run 缺了,配对分析会有洞
+                   # E4's cache_prompt=on and E5's lambda=0.9*mu reuse Runs of E1-S; if those Runs are missing, the paired analysis has holes
                    "missing_reused": {st.experiment: missing for st in stages
                                       if (missing := [n for n in st.reused if not (self.raw / n / "batch_meta.json").exists()])}}
         (self.work / "summary.json").write_text(json.dumps(summary, indent=1))
@@ -319,7 +319,7 @@ class Batch:
 
 
 class _ThermSampler(threading.Thread):
-    """Run 期间每隔几十秒记一次 pmset -g therm 到 therm.jsonl;任何一次降频都算该 Run 降频。"""
+    """During a Run, record `pmset -g therm` to therm.jsonl every few tens of seconds; any single throttling event counts as the Run being throttled."""
 
     def __init__(self, therm: Callable[[], str], path: Path, interval_s: float):
         super().__init__(daemon=True)

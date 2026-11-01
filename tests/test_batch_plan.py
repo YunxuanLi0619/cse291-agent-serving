@@ -58,7 +58,7 @@ def test_no_run_appears_in_two_stages_and_names_are_unique():
 
 def test_runs_are_ordered_repetition_by_repetition_with_alternating_config_order():
     e1 = stages()["E1-S"].runs
-    assert [r.seed for r in e1] == [1] * 4 + [2] * 4 + [3] * 4  # 漂移(降频)分摊到各配置,而不是压在最后一个配置上
+    assert [r.seed for r in e1] == [1] * 4 + [2] * 4 + [3] * 4  # drift (throttling) is spread across configurations instead of landing on the last one
     assert [r.c for r in e1[:4]] == [1, 2, 4, 8]
     assert [r.c for r in e1[4:8]] == [8, 4, 2, 1]
 
@@ -68,7 +68,7 @@ def test_each_stage_has_a_30_task_pilot_on_seed_1_that_is_not_one_of_the_full_ru
         assert st.pilot.n_tasks == 30 and st.pilot.seed == 1
         assert all(r.n_tasks == 100 for r in st.runs)
         assert st.pilot.name not in {r.name for r in st.runs}
-    assert stages()["E4"].pilot.cache_prompt is False  # 试跑要覆盖本实验新增的那一侧
+    assert stages()["E4"].pilot.cache_prompt is False  # the pilot must cover the side newly added by this experiment
 
 
 def test_run_name_encodes_the_whole_configuration():
@@ -79,5 +79,5 @@ def test_run_name_encodes_the_whole_configuration():
 def test_estimated_total_time_matches_the_budget_in_the_lab_notebook():
     plan = build_plan(CFG)
     hours = sum(r.estimated_s for st in plan for r in st.runs) / 3600
-    assert 17 < hours < 22  # 手册预算「约 20 h 以内」;逐 Run 粗估 = 到达期 n/λ + 约 150 s 排空与重启
+    assert 17 < hours < 22  # the handbook budget "within about 20 h"; rough per-Run estimate = arrival period n/λ + about 150 s for draining and restart
     assert plan[0].runs[0].estimated_s == 100 / 0.088 + 150

@@ -1,4 +1,4 @@
-"""批跑用到的 Workload 文件:E3 的固定 Tool delay 变体由 default_s<seed>.json 派生;所有文件的 sha256 冻结在 configs/batch.json。"""
+"""Workload files used by the batch: the fixed-Tool-delay variants of E3 are derived from default_s<seed>.json; the sha256 of every file is frozen in configs/batch.json."""
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ from .plan import build_plan
 
 
 def write_e3_variants(root: Path, cfg: dict) -> None:
-    """每个 seed、每个 delay 一份;同输入字节一致,可重复调用。"""
+    """One per seed and per delay; same input gives identical bytes, safe to call repeatedly."""
     for seed in range(1, cfg["reps"] + 1):
         base = json.loads((root / f"workloads/dev/default_s{seed}.json").read_text())
         for delay in cfg["e3_delays_s"]:
@@ -22,7 +22,7 @@ def needed_workloads(cfg: dict) -> list[str]:
 
 
 def verify_workloads(root: Path, cfg: dict) -> list[str]:
-    """批跑要用的每个 Workload 必须存在,且 sha256 等于冻结值(之后不得改动)。"""
+    """Every Workload the batch needs must exist and its sha256 must equal the frozen value (it must not change afterwards)."""
     problems = []
     frozen = cfg.get("workload_sha256", {})
     for rel in needed_workloads(cfg):

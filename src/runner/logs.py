@@ -1,4 +1,4 @@
-"""JSONL 日志写入:一行一条,每行写完立即落盘。"""
+"""JSONL log writing: one record per line, flushed to disk as soon as each line is written."""
 import json
 from pathlib import Path
 

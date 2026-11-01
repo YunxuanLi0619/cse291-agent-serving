@@ -1,12 +1,12 @@
-"""测量客户端断连后 llama-server 释放 slot 的耗时(issue #3 评论的补充验收条件)。
+"""Measure how long llama-server takes to release a slot after the client disconnects (additional acceptance criterion from the issue #3 comments).
 
-要求 server 以 -np 1 启动,这样只有一个 slot,谁释放了不用归因。每个 trial:
-  1. 等 slot 空闲;发一个流式长 prompt 请求
-  2. 在指定时刻主动断连(「prefill:S」= 发出后 S 秒,此时还没有首个 token;「decode:S」= 首个 token 后 S 秒)
-  3. 每 50 ms 轮询 /slots,直到 is_processing 回到 false,release_s = 释放时刻 - 断连时刻
-结果每个 trial 一行 JSONL,同时打印。
+The server must be started with -np 1 so there is only one slot and no attribution of who released it is needed. Each trial:
+  1. wait for the slot to be idle; send a streaming long-prompt request
+  2. actively disconnect at the specified moment ("prefill:S" = S seconds after sending, before the first token; "decode:S" = S seconds after the first token)
+  3. poll /slots every 50 ms until is_processing returns to false; release_s = release time - disconnect time
+Each trial is one JSONL row and is also printed.
 
-用法: python scripts/measure_slot_release.py --prompt-file P.txt --out results/raw/slot_release/trials.jsonl \
+Usage: python scripts/measure_slot_release.py --prompt-file P.txt --out results/raw/slot_release/trials.jsonl \
         prefill:1 prefill:5 prefill:10 decode:1
 """
 import argparse
@@ -39,13 +39,13 @@ async def trial(client: httpx.AsyncClient, prompt: str, spec: str, max_tokens: i
     phase, _, secs = spec.partition(":")
     at = float(secs)
     await wait_idle(client, idle_limit_s)
-    # 开头加随机前缀:否则同一 prompt 会整段命中 slot 里留下的 KV(LCP),prefill 瞬间结束
+    # Add a random prefix at the start: otherwise the same prompt would fully hit the KV left in the slot (LCP) and prefill would finish instantly
     nonce = uuid.uuid4().hex
     body = {"messages": [{"role": "user", "content": f"[{nonce}] {prompt}"}], "max_tokens": max_tokens,
             "temperature": 0, "ignore_eos": True, "stream": True}
     t_send = time.monotonic()
     t_first = None
-    done = False  # 请求在我们断连之前就自然结束了(prefill 比预期快)
+    done = False  # the request finished naturally before we disconnected (prefill was faster than expected)
     try:
         async with asyncio.timeout(at if phase == "prefill" else None) as budget:
             async with client.stream("POST", "/v1/chat/completions", json=body) as r:
@@ -59,7 +59,7 @@ async def trial(client: httpx.AsyncClient, prompt: str, spec: str, max_tokens: i
                         done = True
     except TimeoutError:
         pass
-    t_disc = time.monotonic()  # async with 退出时连接已被关闭
+    t_disc = time.monotonic()  # the connection is already closed when the async with exits
     t_release = t_disc
     if not done:
         while await slot_busy(client):
@@ -69,7 +69,7 @@ async def trial(client: httpx.AsyncClient, prompt: str, spec: str, max_tokens: i
            "first_token_s": None if t_first is None else round(t_first - t_send, 3),
            "ended_naturally": done, "release_s": None if done else round(t_release - t_disc, 3)}
     if phase == "prefill" and t_first is not None:
-        row["note"] = "首个 token 先于断连出现:这次不是 prefill 期间断连"
+        row["note"] = "first token appeared before the disconnect: this was not a disconnect during prefill"
     return row
 
 
@@ -92,7 +92,7 @@ async def main_async(a) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("specs", nargs="+", help="prefill:<发出后秒数> 或 decode:<首个 token 后秒数>")
+    ap.add_argument("specs", nargs="+", help="prefill:<seconds after sending> or decode:<seconds after the first token>")
     ap.add_argument("--prompt-file", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--base-url", default="http://127.0.0.1:8080")

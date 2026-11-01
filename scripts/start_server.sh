@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# 启动 llama-server;所有固定参数集中在这里,保证每次一致。
-# 用法: scripts/start_server.sh <np> <ctx> [extra flags...]
-# 线程数读 configs/server.json(#7 冻结的值;缺文件则 8)。
-# 可用环境变量覆盖: LLAMA_SERVER_BIN, MODEL, SERVER_CONFIG
+# Start llama-server; all fixed parameters are kept here so that every start is identical.
+# Usage: scripts/start_server.sh <np> <ctx> [extra flags...]
+# The thread count is read from configs/server.json (the value frozen in #7; 8 if the file is missing).
+# Can be overridden via environment variables: LLAMA_SERVER_BIN, MODEL, SERVER_CONFIG
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: $0 <np> <ctx> [extra flags...]" >&2; exit 2; }
 NP=$1; CTX=$2; shift 2

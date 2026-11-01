@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Step 5.5-A 速度校准:单流速度、聚合吞吐(c=1/2/4)、四种任务类型的 T_solo。
+"""Step 5.5-A speed calibration: single-stream speed, aggregate throughput (c=1/2/4), and T_solo for the four task types.
 
-用法(服务须已按配置 A 启动: -np 4 -c 16384 --no-kv-unified):
+Usage (the server must already be started with config A: -np 4 -c 16384 --no-kv-unified):
     .venv/bin/python scripts/step55_calibrate.py [--out results/raw/step55/calibration.json]
 
-这是校准用的粗原型,不是 Step 7 的 workload 生成器;prompt 用固定种子的随机词构造,
-每次请求内容都不同,避免 slot 里的前缀复用让 T_solo 偏乐观。
+This is a rough calibration prototype, not the Step 7 workload generator; prompts are built from random words with a fixed seed,
+and every request has different content, to avoid prefix reuse in the slot making T_solo optimistic.
 """
 import argparse, json, random, subprocess, time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,13 +22,13 @@ def tok_count(c, text):
 
 
 def make_text(c, rng, n_tokens):
-    """随机词拼接到恰好约 n_tokens 个 token(按 /tokenize 计数)。"""
+    """Concatenate random words to exactly about n_tokens tokens (counted with /tokenize)."""
     words, n = [], 0
     while n < n_tokens:
         chunk = [rng.choice(WORDS) + str(rng.randrange(100)) for _ in range(max(1, (n_tokens - n) // 3))]
         words += chunk
         n = tok_count(c, " ".join(words))
-    # 若超出就从尾部裁剪
+    # if it overshoots, trim from the tail
     while n > n_tokens and words:
         words = words[:-1]
         n = tok_count(c, " ".join(words))
@@ -36,7 +36,7 @@ def make_text(c, rng, n_tokens):
 
 
 def stream_chat(c, messages, max_tokens):
-    """一次流式请求;返回 t_total、t_first_token、timings、id_slot 线索。"""
+    """One streaming request; returns t_total, t_first_token, timings, and id_slot hints."""
     body = {"messages": messages, "max_tokens": max_tokens, "ignore_eos": True,
             "temperature": 0, "stream": True}
     t0 = time.time(); tft = None; timings = None; text = []; extra_keys = set()
@@ -58,7 +58,7 @@ def stream_chat(c, messages, max_tokens):
 
 
 def run_task(c, rng, ttype, tool_delay=1.0, agent_steps=4):
-    """无竞争地跑一个任务,返回耗时分解。"""
+    """Run one task without contention and return the timing breakdown."""
     t0 = time.time(); steps = []; idle = 0.0
     if ttype == "agent":
         msgs = [{"role": "user", "content": make_text(c, rng, 800)}]
@@ -93,10 +93,10 @@ def main():
     with httpx.Client() as c:
         slots = c.get(f"{BASE}/slots").json(); res["n_slots"] = len(slots); res["n_ctx"] = [s["n_ctx"] for s in slots]
         res["slot_keys"] = sorted(slots[0].keys())
-        # 预热(丢弃)
+        # warm-up (discarded)
         stream_chat(c, [{"role": "user", "content": make_text(c, rng, 200)}], 32)
 
-        # A.1 单流:~3000 token prompt + 256 输出
+        # A.1 single stream: ~3000-token prompt + 256 outputs
         a1 = []
         for _ in range(3):
             r = stream_chat(c, [{"role": "user", "content": make_text(c, rng, 3000)}], 256)
@@ -104,7 +104,7 @@ def main():
                       | {"ttft": r["t_first_token"], "t_total": r["t_total"]})
         res["A1_single_stream_3000in_256out"] = a1; print("A1", json.dumps(a1, indent=1), flush=True)
 
-        # A.2 聚合吞吐:c=1/2/4 各 8 个相同形状请求(256 in, 128 out)
+        # A.2 aggregate throughput: 8 identically shaped requests each at c=1/2/4 (256 in, 128 out)
         a2 = {}
         for conc in (1, 2, 4):
             reqs = [[{"role": "user", "content": make_text(c, rng, 256)}] for _ in range(8)]
@@ -119,7 +119,7 @@ def main():
             print("A2 c=%d" % conc, a2[conc], flush=True)
         res["A2_aggregate_256in_128out_x8"] = a2
 
-        # A.3 T_solo:每种类型 3 次,c=1
+        # A.3 T_solo: 3 runs per type, c=1
         a3 = {}
         for t in ("short", "longctx", "longgen", "agent"):
             runs = [run_task(c, rng, t) for _ in range(3)]

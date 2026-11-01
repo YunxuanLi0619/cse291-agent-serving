@@ -1,6 +1,6 @@
-"""分析命令:从原始日志目录重新生成全部指标 CSV 和图。每张图 = 同名的 .csv + .png,报告引用 CSV。
+"""Analysis command: regenerate all metric CSVs and figures from the raw log directory. Each figure = a .csv and a .png with the same name; the report cites the CSV.
 
-用法: python -m src.analysis --raw results/raw/e1 --out results/analysis
+Usage: python -m src.analysis --raw results/raw/e1 --out results/analysis
 """
 import argparse
 import sys
@@ -12,7 +12,7 @@ from .metrics import kv_utilization, peak_memory, run_metrics, step_slice
 from .plots import Panel, line_panels, memory_bars, time_curves
 from .runs import load_runs
 
-# 一个 Run 的配置键;platform 单独处理(不同平台的数据不混画),seed 是重复编号
+# Config key of one Run; platform is handled separately (data from different platforms is never plotted together), seed is the repeat index
 CONFIG_KEYS = ["platform", "series", "B", "c", "lambda", "tool_delay_s", "cache_prompt"]
 SWEEP_AXES = ["c", "lambda", "tool_delay_s"]
 METRICS = ["p50_s", "p99_s", "throughput_per_s", "goodput_per_s", "fail_rate", "timeout_rate",
@@ -30,14 +30,14 @@ def run_table(runs) -> pd.DataFrame:
 
 
 def mean_std(g, columns: list[str]) -> pd.DataFrame:
-    """分组后每列给均值和样本标准差(n=1 时为空),列名 `<m>_mean` / `<m>_std`。"""
+    """After grouping, give the mean and sample standard deviation of every column (empty when n=1); column names `<m>_mean` / `<m>_std`."""
     agg = g[columns].agg(["mean", "std"])
     agg.columns = [f"{m}_{s}" for m, s in agg.columns]
     return agg
 
 
 def aggregate_seeds(df: pd.DataFrame, keys: list[str], metrics: list[str]) -> pd.DataFrame:
-    """同配置的重复 Run(不同 seed)合并。"""
+    """Merge repeated Runs (different seeds) of the same configuration."""
     g = df.groupby(keys, dropna=False)
     agg = mean_std(g, metrics)
     agg.insert(0, "n_seeds", g["seed"].nunique(dropna=False))
@@ -45,7 +45,7 @@ def aggregate_seeds(df: pd.DataFrame, keys: list[str], metrics: list[str]) -> pd
 
 
 def with_line_label(df: pd.DataFrame, line_cols: list[str]) -> pd.DataFrame:
-    """加一列 `line`:线的图例名 = 各 line_cols 取值拼接(没有可分的列则为 all)。"""
+    """Add a `line` column: the line's legend name = the line_cols values joined together (all if there are no columns to split on)."""
     data = df.copy()
     data.insert(0, "line", df[line_cols].astype(object).map(str).agg(" ".join, axis=1) if line_cols else "all")
     return data
@@ -81,14 +81,14 @@ PAIRED_PANELS: list[Panel] = [
 
 
 def paired_cache_prompt(runs: pd.DataFrame, out: Path) -> None:
-    """cache_prompt 开 - 关,同 seed(同一份 Workload)内配对相减,再跨 seed 取均值和标准差;只有一侧的 seed 不参与。"""
+    """cache_prompt on minus off, paired within the same seed (the same Workload), then mean and standard deviation across seeds; seeds present on only one side are not used."""
     keys = [k for k in CONFIG_KEYS if k != "cache_prompt"] + ["seed"]
     deltas = ["p50_s", "goodput_per_s", "throughput_per_s", "fail_rate"]
     df = runs[runs["cache_prompt"].notna()]
     for platform, d in df.groupby("platform", dropna=False):
         on = d[d["cache_prompt"].astype(bool)].set_index(keys)[deltas]
         off = d[~d["cache_prompt"].astype(bool)].set_index(keys)[deltas]
-        diff = (on - off.reindex(on.index))[on.index.isin(off.index)]  # 缺 off 一侧的 seed 不配对
+        diff = (on - off.reindex(on.index))[on.index.isin(off.index)]  # seeds without an off side are not paired
         if diff.empty:
             continue
         diff.columns = [f"{m}_delta" for m in deltas]
@@ -142,7 +142,7 @@ def memory_figures(runs, out: Path) -> None:
         agg = mean_std(g, ["footprint_mb_peak", "rss_mb_peak"])
         agg.insert(0, "n_runs", g.size())
         agg = agg.reset_index().dropna(subset=["footprint_mb_peak_mean", "rss_mb_peak_mean"], how="all")
-        if agg.empty:  # 这些 Run 没有任何成功的内存采样:不出图
+        if agg.empty:  # none of these Runs has a successful memory sample: no figure
             continue
         memory_bars(agg, label_cols=MEMORY_KEYS[1:], title=f"peak memory by server config [{slug}]",
                     path=out / f"memory_peak_{slug}.png", rss_note=RSS_NOTE.get(slug, "RSS (secondary)"))
@@ -150,7 +150,7 @@ def memory_figures(runs, out: Path) -> None:
 
 
 def kv_util_figures(runs, out: Path) -> None:
-    """每个配置取 seed 最小的那个 Run 画一条 KV utilization 曲线(B 取自该 Run 自己的 -c)。"""
+    """For each configuration, draw one KV utilization curve from the Run with the smallest seed (B comes from that Run's own -c)."""
     config_keys = [k for k in CONFIG_KEYS if k != "platform"]
     first: dict[tuple, object] = {}
     for r in sorted(runs, key=lambda r: (r.config["seed"] is None, r.config["seed"], r.name)):
@@ -170,8 +170,8 @@ def kv_util_figures(runs, out: Path) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--raw", required=True, help="原始日志目录(递归查找 Run 目录)")
-    ap.add_argument("--out", required=True, help="输出目录:每张图一个同名 .csv 和 .png,另有 runs.csv")
+    ap.add_argument("--raw", required=True, help="raw log directory (Run directories are found recursively)")
+    ap.add_argument("--out", required=True, help="output directory: one .csv and one .png of the same name per figure, plus runs.csv")
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)

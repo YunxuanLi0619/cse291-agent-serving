@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""批跑前检查(#7):线程数比较、T_solo 复测、c=8 聚合吞吐、冷盘启动。
+"""Pre-batch checks (#7): thread count comparison, T_solo re-measurement, c=8 aggregate throughput, cold-disk start.
 
-用法(须插电、关低电量模式;自己启停 llama-server,启动前确保 8080 没被占用):
+Usage (must be on AC power with low-power mode off; starts and stops llama-server itself, make sure port 8080 is free before starting):
     .venv/bin/python scripts/prebatch_check.py threads [--threads 8 4 10 8]
-    .venv/bin/python scripts/prebatch_check.py freeze          # 按 threads 结果写 configs/server.json
-    .venv/bin/python scripts/prebatch_check.py tsolo           # 用冻结的线程数复测 T_solo
-    .venv/bin/python scripts/prebatch_check.py c8              # np=8 上比较 c=4 与 c=8 的聚合吞吐
-    .venv/bin/python scripts/prebatch_check.py cold            # 先 `sudo purge`,再立刻运行
+    .venv/bin/python scripts/prebatch_check.py freeze          # write configs/server.json from the threads results
+    .venv/bin/python scripts/prebatch_check.py tsolo           # re-measure T_solo with the frozen thread count
+    .venv/bin/python scripts/prebatch_check.py c8              # compare aggregate throughput of c=4 vs c=8 on np=8
+    .venv/bin/python scripts/prebatch_check.py cold            # first `sudo purge`, then run immediately
 
-每个阶段的原始数据写 results/raw/prebatch/<阶段>.json,含电源状态与 pmset -g therm。
-决策逻辑在 src/calibration/prebatch.py(有单测);prompt 构造和请求沿用 step55_calibrate.py。
+The raw data of each stage is written to results/raw/prebatch/<stage>.json, including power state and pmset -g therm.
+The decision logic is in src/calibration/prebatch.py (unit-tested); prompt construction and requests follow step55_calibrate.py.
 """
 import argparse, json, os, random, signal, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +34,7 @@ def sh(cmd):
 def env_state():
     return {"time": time.strftime("%F %T"), "batt": sh("pmset -g batt | sed -n 1,2p"),
             "lowpowermode": sh("pmset -g | grep lowpowermode"), "therm": sh("pmset -g therm | head -4"),
-            "top_cpu": sh("ps -Ao pcpu,comm -r | sed -n 2,4p | cut -c1-120")}  # 找出抢 CPU 的后台进程
+            "top_cpu": sh("ps -Ao pcpu,comm -r | sed -n 2,4p | cut -c1-120")}  # find background processes competing for CPU
 
 
 def save(phase, data):
@@ -44,7 +44,7 @@ def save(phase, data):
 
 
 class Server:
-    """start_server.sh 末尾是 exec,所以 Popen 的 pid 就是 llama-server。"""
+    """start_server.sh ends with exec, so the Popen pid is llama-server."""
 
     def __init__(self, np_, threads, extra=()):
         OUT.mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ class Server:
         if out.returncode:
             self.__exit__()
             raise SystemExit("server never became healthy")
-        self.health_wait_s = int(out.stdout.strip())  # wait_health.sh 的整秒读数
+        self.health_wait_s = int(out.stdout.strip())  # whole-second reading from wait_health.sh
         self.ready_s = time.time() - self.t0
         return self
 
@@ -93,7 +93,7 @@ def phase_threads(a):
     rounds = []
     for i, t in enumerate(a.threads):
         if i:
-            time.sleep(a.cooldown)  # 给 MacBook Air(无风扇)散热,减少前一档对后一档的影响
+            time.sleep(a.cooldown)  # let the fanless MacBook Air cool down, reducing the influence of the previous step on the next
         with Server(4, t, ["--no-kv-unified"]), httpx.Client() as c:
             warmup(c, rng)
             r = {"threads": t, "env_start": env_state()}
@@ -120,7 +120,7 @@ def phase_freeze(a):
     d = prebatch.decide_threads(pooled)
     save("threads_decision", {"decision": d, "pooled": {str(k): v for k, v in pooled.items()}})
     t_solo = json.loads((ROOT / "configs/t_solo.json").read_text())
-    prebatch.freeze(ROOT / "configs", d["threads"], t_solo)  # T_solo 表在 tsolo 阶段之后再覆盖
+    prebatch.freeze(ROOT / "configs", d["threads"], t_solo)  # the T_solo table is overwritten again after the tsolo stage
     print("frozen:", d, flush=True)
 
 
@@ -157,7 +157,7 @@ def phase_c8(a):
     with Server(8, threads, ["--no-kv-unified"]), httpx.Client() as c:
         warmup(c, rng)
         env0 = env_state()
-        for _ in range(a.reps):  # 交替 c=4 / c=8,抵消降频漂移
+        for _ in range(a.reps):  # alternate c=4 / c=8 to cancel throttling drift
             for conc in (4, 8):
                 res.append(aggregate(rng, c, conc, n_reqs=16))
                 print(res[-1], flush=True)
@@ -171,7 +171,7 @@ def phase_c8(a):
 def phase_cold(a):
     threads = json.loads((ROOT / "configs/server.json").read_text())["threads"]
     out = {"threads": threads, "env_start": env_state()}
-    for label in ("cold", "warm"):  # 先冷(须已 purge),再热(同一份文件刚被读过)
+    for label in ("cold", "warm"):  # cold first (must already be purged), then warm (the same file was just read)
         with Server(4, threads, ["--no-kv-unified"]) as s:
             out[label] = {"wait_health_s": s.health_wait_s, "ready_s": s.ready_s}
         print(label, out[label], flush=True)
@@ -188,7 +188,7 @@ def main():
     p = sub.add_parser("c8"); p.add_argument("--reps", type=int, default=2)
     sub.add_parser("cold")
     a = ap.parse_args()
-    # 插电也会空闲睡眠:第一轮对比里睡了 644 s 和 900 s,正好落在请求中间。随本进程退出而结束。
+    # AC power also has idle sleep: in the first comparison it slept for 644 s and 900 s, right in the middle of requests. Ends when this process exits.
     subprocess.Popen(["caffeinate", "-is", "-w", str(os.getpid())])
     {"threads": phase_threads, "freeze": phase_freeze, "tsolo": phase_tsolo, "c8": phase_c8, "cold": phase_cold}[a.phase](a)
 

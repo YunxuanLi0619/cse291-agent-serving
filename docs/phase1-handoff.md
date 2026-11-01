@@ -1,32 +1,32 @@
-# Phase 1 交接:Step 0–5.5 之后(2026-10-19)
+# Phase 1 handoff: after Steps 0–5.5 (2026-10-19)
 
-新会话(`/grill-with-docs` 等)从这里开始读。详细数据见 `docs/lab-notebook.md`,原始数据见 `results/raw/`。
+A new session (`/grill-with-docs` etc.) starts reading from here. For detailed data see `docs/lab-notebook.md`; for raw data see `results/raw/`.
 
-## 已定的事实(可直接写进 GLOSSARY / ADR)
-- **ADR 候选:** ① CPU-only 编译(`-DGGML_METAL=OFF`);② 内存预算 B = 总 KV token 数(`-c`),字节 = B × 114,688;③ 不变量 c ≤ np;④ 峰值内存主口径 = `footprint`,RSS 仅作次口径(macOS 压缩内存使 RSS 不可信);⑤ 同一配置下内存由启动参数决定,与负载无关。
-- **口径表:** 超时、deadline、goodput、冷启动、失败分类,见 lab-notebook「5.5-C」。
-- **固定版本:** llama.cpp `1b29621bacc6a446bd523fc790316a24a06e886f`(b11741),模型 `Llama-3.2-3B-Instruct-Q4_K_M.gguf` sha256 `6c1a2b41…28ff`,二进制 sha256 见 `results/raw/env/env_snapshot.txt`。
-- **校准数字(电池下测得):** T_solo short 4.3 / longctx 35.0 / longgen 22.5 / agent(4 步,delay 1 s)35.2 s;S̄=20.26 s;μ≈0.074 task/s;λ 网格 {0.022, 0.044, 0.067, 0.089};总机时 ≈20.6 h(依赖 E4-on、E5 的 0.9μ 复用 E1 数据)。
+## Established facts (can be written directly into GLOSSARY / ADR)
+- **ADR candidates:** ① CPU-only build (`-DGGML_METAL=OFF`); ② memory budget B = total KV token count (`-c`), bytes = B × 114,688; ③ invariant c ≤ np; ④ primary peak-memory measure = `footprint`, RSS only secondary (compressed memory on macOS makes RSS untrustworthy); ⑤ for a given configuration, memory is determined by launch parameters and is independent of load.
+- **Definitions table:** timeouts, deadline, goodput, cold start, failure classification; see lab-notebook "5.5-C".
+- **Pinned versions:** llama.cpp `1b29621bacc6a446bd523fc790316a24a06e886f` (b11741), model `Llama-3.2-3B-Instruct-Q4_K_M.gguf` sha256 `6c1a2b41…28ff`, binary sha256 in `results/raw/env/env_snapshot.txt`.
+- **Calibration numbers (measured on battery):** T_solo short 4.3 / longctx 35.0 / longgen 22.5 / agent (4 steps, 1 s delay) 35.2 s; S̄=20.26 s; μ≈0.074 task/s; λ grid {0.022, 0.044, 0.067, 0.089}; total machine time ≈20.6 h (relies on E4-on and E5's 0.9μ reusing E1 data).
 
-## 与手册(phase1-steps.md)不一致、实现时以此为准
-1. `--no-mmap` 在该 commit 不存在,改用 `-lm none`(`-lm mmap|none|mlock|mmap+mlock`)。
-2. 默认日志不含超参/KV buffer,需要 `-lv 4`。
-3. `docs/action-guide.md` §3.3 假设"RSS 随负载增长"——已被实测推翻,作废。
-4. 流式 chunk 与 `/slots` **没有 `id_slot`**:`requests.jsonl` 的该字段留空,或用 server 日志 `launch_slot_: id N | task T` 事后关联。
-5. token 自检:chat template 约 +32 token,short(目标 256)实测 290;生成器以 `usage.prompt_tokens` 为准校准 ±5%。
-6. `timings` 在最后一个数据 chunk(`finish_reason` 那个,`[DONE]` 之前)。`ignore_eos` 在 OpenAI 兼容接口上生效。断连 ≈0.7 s 释放 slot。
-7. 新发现的参数:`--kv-unified-per-slot N`(每 slot 上下文上限),尚未试。
+## Where this differs from the handbook (phase1-steps.md); follow this when implementing
+1. `--no-mmap` does not exist in this commit; use `-lm none` instead (`-lm mmap|none|mlock|mmap+mlock`).
+2. The default log does not contain hyperparameters/KV buffer; `-lv 4` is needed.
+3. `docs/action-guide.md` §3.3 assumes "RSS grows with load" — this has been refuted by measurement and is void.
+4. Streaming chunks and `/slots` **have no `id_slot`**: leave that field of `requests.jsonl` empty, or correlate afterwards using the server log `launch_slot_: id N | task T`.
+5. Token self-check: the chat template adds about +32 tokens, and short (target 256) measures 290; the generator calibrates to ±5% based on `usage.prompt_tokens`.
+6. `timings` is in the last data chunk (the one with `finish_reason`, before `[DONE]`). `ignore_eos` takes effect on the OpenAI-compatible interface. A disconnect releases the slot in ≈0.7 s.
+7. Newly found parameter: `--kv-unified-per-slot N` (per-slot context cap), not yet tried.
 
-## Step 9 之前必须做 / 尚未验证
-- [ ] **插电后复测 T_solo**(每类 3 个任务);与 5.5 偏差 >15% 就重新校准 λ 网格、deadline、预算。校准当时在电池供电、低电量模式已关。
-- [ ] **线程数敏感性:** 本机 4 个性能核 + 6 个能效核,`-t 8` = 4P+4E。`-t 4` / `-t 8` / `-t 10` 的速度和稳定性没比过;若要改,必须在重新校准之前定下来(改了就要重测一切速度数字)。
-- [ ] c=8 的聚合吞吐没测(预算里假设 = c=4)。
-- [ ] 冷盘启动没测(所有冷启动数字都是模型已在页缓存里)。
-- [ ] 共享池(`-kvu`)耗尽时 server 的实际行为未测(系列 U 要观察);`/research` 待跑。
-- [ ] `/research` 的 5 个问题(见 phase1-steps.md「/research 要回答的问题」)——其中 slot 选择(LCP 相似度)、断连取消、`id_slot` 缺失已有日志证据,但没有读源码核实。
-- [ ] 系统采样要用 `footprint`(约 0.2–0.5 s/次),采样间隔不要低于 0.5 s;`rss_footprint_sampler.sh` 已是这个做法。
+## To do before Step 9 / not yet verified
+- [ ] **Re-measure T_solo on AC power** (3 tasks per type); if it deviates from 5.5 by >15%, recalibrate the λ grid, deadlines and budget. Calibration was done on battery power with low-power mode off.
+- [ ] **Thread-count sensitivity:** this machine has 4 performance cores + 6 efficiency cores, and `-t 8` = 4P+4E. The speed and stability of `-t 4` / `-t 8` / `-t 10` have not been compared; if it is to change, it must be decided before recalibration (changing it means re-measuring every speed number).
+- [ ] The c=8 aggregate throughput has not been measured (the budget assumes = c=4).
+- [ ] Cold-disk start has not been measured (all cold-start numbers have the model already in the page cache).
+- [ ] The server's actual behavior when the shared pool (`-kvu`) is exhausted has not been measured (series U should observe it); `/research` is yet to be run.
+- [ ] The 5 questions of `/research` (see "Questions /research must answer" in phase1-steps.md) — of which slot selection (LCP similarity), disconnect cancellation and the missing `id_slot` already have log evidence but have not been verified against the source.
+- [ ] System sampling must use `footprint` (about 0.2–0.5 s per call); do not make the sampling interval lower than 0.5 s; `rss_footprint_sampler.sh` already does this.
 
-## 环境提醒
-- 批跑前:插电、关低电量模式、`caffeinate -dimsu`、记录 `pmset -g therm`。本机是 MacBook Air(无风扇),长时间满载会降频。
-- 当前有两个多余的 `caffeinate -i -t 300`(非本会话启动的 5 分钟定时器)和一个 `caffeinate -dimsu`(本会话启动,批跑结束后应手动 kill)。
-- git 作者邮箱是 `851489600@qq.com`,与 GitHub 账号邮箱不同;课程 PDF 在 `.gitignore` 里,不入库。
+## Environment reminders
+- Before a batch: plug in, turn off low-power mode, `caffeinate -dimsu`, record `pmset -g therm`. This machine is a MacBook Air (fanless) and will throttle under prolonged full load.
+- Currently there are two redundant `caffeinate -i -t 300` (5-minute timers not started by this session) and one `caffeinate -dimsu` (started by this session, to be killed manually after the batch ends).
+- The git author email is `851489600@qq.com`, which differs from the GitHub account email; the course PDFs are in `.gitignore` and are not checked in.

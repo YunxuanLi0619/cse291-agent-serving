@@ -85,4 +85,4 @@ def test_unreadable_field_is_null_and_named_in_errors_not_dropped(tmp_path):
     assert m["pmset_therm"] is None and m["power_source"] is None and m["low_power_mode"] is None
     assert m["server_cmdline"] is None and m["model_sha256"] is None
     assert {"pmset_therm", "power_source", "low_power_mode", "server_cmdline", "model_sha256"} <= set(m["errors"])
-    assert m["repo_git_sha"]  # 不相干的字段照常
+    assert m["repo_git_sha"]  # unrelated fields are unaffected

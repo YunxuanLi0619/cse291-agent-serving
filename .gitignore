@@ -4,10 +4,10 @@ __pycache__/
 server-startup.log
 results/raw/*.tmp
 .DS_Store
-# 课程发的 PDF 讲义不入库
+# Course lecture PDFs are not checked in
 *.pdf
 .pytest_cache/
 .mypy_cache/
 
-# 例外:Phase 1 报告 PDF 要入库(课程讲义 PDF 仍然不入库)
+# Exception: the Phase 1 report PDF is checked in (course lecture PDFs still are not)
 !report/phase1/phase1_report.pdf

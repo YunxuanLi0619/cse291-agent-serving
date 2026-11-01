@@ -1,7 +1,7 @@
-"""批跑的门禁与 Run 完整性校验。返回问题列表(空 = 通过),读不到的一律当成有问题,不假设没事。
+"""Batch gates and Run integrity checks. Return a list of problems (empty = pass); anything that cannot be read counts as a problem, never assumed fine.
 
-门禁:电源必须是 AC、低电量模式关(#9);降频只记录,不拒绝(无风扇机器长时间满载几乎必然降频)。
-校验:Run 目录产出齐全;有问题的 Run 不能算「已完成」,批跑会把它挪开重跑。
+Gate: power must be AC and low-power mode off (#9); throttling is only recorded, not refused (a fanless machine under long full load will almost certainly throttle).
+Validation: the Run directory has all outputs; a Run with problems cannot count as "completed", and the batch moves it aside and reruns it.
 """
 import json
 import re
@@ -10,9 +10,9 @@ from pathlib import Path
 from src.analysis.runs import read_jsonl
 from src.runner.manifest import low_power_mode, power_source
 
-MAX_SAMPLE_GAP_S = 5.0  # 采样间隔 0.5 s;大缺口 = 系统睡眠或进程被冻住
+MAX_SAMPLE_GAP_S = 5.0  # sampling interval is 0.5 s; a large gap = system sleep or a frozen process
 MAX_SAMPLE_ERROR_SHARE = 0.02
-MAX_ERROR_OTHER_SHARE = 0.05  # 超时是过载的正常结果;error_other 多半是 server 挂了
+MAX_ERROR_OTHER_SHARE = 0.05  # timeouts are a normal result of overload; error_other is mostly the server dying
 WARMUP_TASKS = 3
 _LIMIT_RE = re.compile(r"^\s*CPU_(?:Speed|Scheduler)_Limit\s*=\s*(\d+)", re.MULTILINE)
 _WARNING_RE = re.compile(r"^(?!Note:).*warning level", re.MULTILINE | re.IGNORECASE)
@@ -35,7 +35,7 @@ def gate_problems(batt: str, settings: str) -> list[str]:
 
 
 def is_throttled(therm: str) -> bool:
-    """`pmset -g therm` 没有降频时只有三行 `Note: No ... recorded`;降频时出现 CPU_*_Limit < 100 或 warning level。"""
+    """Without throttling `pmset -g therm` prints only three `Note: No ... recorded` lines; when throttling there is a CPU_*_Limit < 100 or a warning level."""
     return any(int(v) < 100 for v in _LIMIT_RE.findall(therm)) or bool(_WARNING_RE.search(therm))
 
 

@@ -1,272 +1,272 @@
-# 实验记录本(每次操作都追加,不要删改)
+# Lab notebook (append for every operation; do not delete or rewrite)
 
-## 环境
-- 日期:2026-10-19
-- 机器:**MacBook Air**(无风扇,持续负载会散热降频,每次运行记 `pmset -g therm`), Apple M4, 16GB, 10 cores, macOS (uname -a: Darwin Yunxuans-MacBook-Air.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:03 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8132 arm64)
+## Environment
+- Date: 2026-10-19
+- Machine: **MacBook Air** (fanless, sustained load causes thermal throttling, so record `pmset -g therm` for every run), Apple M4, 16GB, 10 cores, macOS (uname -a: Darwin Yunxuans-MacBook-Air.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:03 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8132 arm64)
 - llama.cpp commit: 1b29621bacc6a446bd523fc790316a24a06e886f (tag b11741, 2026-10-19 12:30 -0700; `llama-server --version`: 0.7.0-dev build 11741, AppleClang 21.0.0)
-- 编译命令与耗时: `cmake -B build -DGGML_METAL=OFF -DCMAKE_BUILD_TYPE=Release` + `cmake --build build --config Release -t llama-server -j 10`;耗时 real 2:24.91(user 641.86s)。CPU-only。
-- 模型文件与 sha256: Llama-3.2-3B-Instruct-Q4_K_M.gguf, 2019377696 B (≈1.88 GiB), sha256 6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff;来源 https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf;已与 HF API (tree/main) 的 lfs.oid 和 size 比对,一致。
-- 启动参数:
+- Build command and time: `cmake -B build -DGGML_METAL=OFF -DCMAKE_BUILD_TYPE=Release` + `cmake --build build --config Release -t llama-server -j 10`; time real 2:24.91 (user 641.86s). CPU-only.
+- Model file and sha256: Llama-3.2-3B-Instruct-Q4_K_M.gguf, 2019377696 B (≈1.88 GiB), sha256 6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff; source https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf; compared with lfs.oid and size from the HF API (tree/main), and they match.
+- Launch parameters:
 
-## 日志
+## Log
 
-### 2026-10-19 Step 0 — 样例报告
-(Drive 预览只能截图浏览,我只快速浏览了每份的前几页,未通读。)
-1. 高分(Edge Computer-Use Agent):先把瓶颈隔离出来(先单独研究 grounding,再搭完整系统);对比实验控制严格(同一 100 样本子集、相同 prompt/解析流程,只改一个因素);结果以表格 + 柱状图量化(Acc@5/10/20/50px、延迟、量化位宽权衡),并写明硬件(Ryzen 7 9700X / 32GB)。
-2. 低分(Jamie Food Recommender):篇幅主要花在架构/部署/隔离设计(LangGraph、Cloud Run、IAM、GCS 前缀),量化对照实验占比小;"改进"的论证偏描述而非受控测量。→ 我们应该把篇幅花在测量方法与对照上,而不是系统实现细节。
-3. 共同点/启示:高分报告从"观察到的失败"出发,再做对照消融,并给出权衡曲线(accuracy vs latency);我们的对应物是 并发 c vs 吞吐/p99/失败率 的曲线 + 主导瓶颈结论。
-(课程 PDF 里低分报告链接是 ...EOz3cgTi,实际 ID 为 ...FOEz3cgTi 的 `cgTi`;用 pdftotext 提取链接比肉眼读可靠。)
+### 2026-10-19 Step 0 — Sample reports
+(The Drive preview can only be browsed as screenshots; I only skimmed the first few pages of each and did not read them through.)
+1. High-scoring (Edge Computer-Use Agent): isolates the bottleneck first (studies grounding alone first, then builds the full system); strict experimental control in comparisons (same 100-sample subset, same prompt/parsing pipeline, only one factor changed); results quantified with tables + bar charts (Acc@5/10/20/50px, latency, quantization-bit-width trade-offs), and states the hardware (Ryzen 7 9700X / 32GB).
+2. Low-scoring (Jamie Food Recommender): most of the space goes to architecture/deployment/isolation design (LangGraph, Cloud Run, IAM, GCS prefixes), with a small share of quantitative controlled experiments; the argument for "improvements" is descriptive rather than controlled measurement. → We should spend space on measurement methodology and controls rather than system implementation details.
+3. Common points / takeaways: the high-scoring report starts from an "observed failure", then does controlled ablations and gives trade-off curves (accuracy vs latency); our counterpart is the curve of concurrency c vs throughput/p99/failure rate + the dominant bottleneck conclusion.
+(The link of the low-scoring report in the course PDF is ...EOz3cgTi; the actual ID is the `cgTi` of ...FOEz3cgTi; extracting links with pdftotext is more reliable than reading by eye.)
 
-### 2026-10-19 Step 1 — 环境
+### 2026-10-19 Step 1 — Environment
 - xcode-select -p: /Library/Developer/CommandLineTools
-- cmake 4.4.4 (brew);Python 3.12.13 (uv venv .venv);依赖锁定于 requirements.lock.txt (25 行)
-- git init 已完成(分支 main,尚无提交);gh 已登录 YunxuanLi0619。是否 `gh repo create` 待用户决定(未创建)。
-- 磁盘剩余约 110 GiB。
+- cmake 4.4.4 (brew); Python 3.12.13 (uv venv .venv); dependencies locked in requirements.lock.txt (25 lines)
+- git init done (branch main, no commits yet); gh logged in as YunxuanLi0619. Whether to `gh repo create` is up to the user (not created).
+- About 110 GiB of disk left.
 
-### 2026-10-19 Step 2 — 编译
-- 见上方环境。`--help` 中确认存在 -np / -kvu --no-kv-unified / --cache-ram / --metrics / --cache-idle-slots。
-- 新发现:该 commit 有 `--kv-unified-per-slot N`(每 slot 上下文上限,默认不设),Step 5 可考虑对照。
+### 2026-10-19 Step 2 — Build
+- See the environment above. Confirmed in `--help` that -np / -kvu --no-kv-unified / --cache-ram / --metrics / --cache-idle-slots exist.
+- New finding: this commit has `--kv-unified-per-slot N` (per-slot context cap, unset by default); consider it as a comparison in Step 5.
 
-### 2026-10-19 Step 3 — 模型
-- 见上方环境。下载约 6 分钟(与编译/clone 并行,占用带宽)。
+### 2026-10-19 Step 3 — Model
+- See the environment above. Download took about 6 minutes (in parallel with build/clone, sharing bandwidth).
 
-### 2026-10-19 Step 4 — 启动与冒烟测试(配置 A:`-np 4 -c 16384 --no-kv-unified -t 8 --cache-ram 0 --metrics`)
-参数含义见 phase1-steps.md Step 4 表格。服务日志:`server-startup.log`(已 gitignore;第一次无 `-lv`,第二次加了 `-lv 4` 仅为拿到超参/KV buffer 日志,不影响内存)。
-| 测试 | 结果 |
+### 2026-10-19 Step 4 — Launch and smoke test (config A: `-np 4 -c 16384 --no-kv-unified -t 8 --cache-ram 0 --metrics`)
+For the meaning of the parameters see the Step 4 table in phase1-steps.md. Server log: `server-startup.log` (gitignored; the first time without `-lv`, the second time with `-lv 4` only to get the hyperparameter/KV buffer log, which does not affect memory).
+| Test | Result |
 |---|---|
-| 1 /health | `{"status":"ok"}`;冷启动(页缓存已热)5–18 s |
-| 2 对话 | 有 `choices`、`usage.prompt_tokens_details.cached_tokens`、`timings.{cache_n,prompt_n,...}` |
-| 3 /slots | **4 项,每项 n_ctx=4096**(非 unified 时均分假设成立);server 日志 `n_ctx_slot = 4096, kv_unified = 'false'` |
-| 4 /metrics | 有 requests_processing / requests_deferred / n_tokens_max / n_busy_slots_per_decode |
-| 5 流式 | ✅ `timings` 在最后一个数据 chunk(`finish_reason:"stop"` 那个,`[DONE]` 之前) |
-| 6 ignore_eos | ✅ OpenAI 兼容接口上生效:`completion_tokens=200`,`finish_reason=length` |
-| 7 取消 | ✅ 客户端断开后 ≈0.7 s 内 `is_processing` 回到 false;server 日志 `cancel task` → `release` |
-额外发现(llama.cpp 行为,来自日志,待 /research 或源码核实):
-- 选 slot:`selected slot by LCP similarity (f_sim_best > 0.100 thold)`;无匹配时 `by LRU`。→ 续步落到哪个 slot 取决于前缀相似度,不是"空闲优先"。(E3/E4 的解释依据)
-- `--cache-ram 0` 下 `--cache-idle-slots` 被禁用(日志 `requires --cache-ram, disabling`);但 slot 内 KV 仍会复用:第二个请求 `cached_tokens=30`(chat template 前缀)。
-- 该 commit 里 `--no-mmap` **已不存在**,改为 `-lm none`(`-lm mmap|none|mlock|mmap+mlock`)。手册里 5.3 的 `--no-mmap` 请以 `-lm none` 为准。
-- 默认日志级别不打印 `n_layer`/KV buffer;需 `-lv 4`。
-- 响应里是否带 `id_slot`:未检查(5.5 时确认)。
+| 1 /health | `{"status":"ok"}`; cold start (page cache already warm) 5–18 s |
+| 2 chat | has `choices`, `usage.prompt_tokens_details.cached_tokens`, `timings.{cache_n,prompt_n,...}` |
+| 3 /slots | **4 entries, each n_ctx=4096** (the even-split assumption for non-unified holds); server log `n_ctx_slot = 4096, kv_unified = 'false'` |
+| 4 /metrics | has requests_processing / requests_deferred / n_tokens_max / n_busy_slots_per_decode |
+| 5 streaming | ✅ `timings` is on the last data chunk (the one with `finish_reason:"stop"`, before `[DONE]`) |
+| 6 ignore_eos | ✅ takes effect on the OpenAI-compatible interface: `completion_tokens=200`, `finish_reason=length` |
+| 7 cancel | ✅ `is_processing` returns to false within ≈0.7 s after the client disconnects; server log `cancel task` → `release` |
+Additional findings (llama.cpp behavior, from the logs, to be verified by /research or the source):
+- Slot selection: `selected slot by LCP similarity (f_sim_best > 0.100 thold)`; with no match, `by LRU`. → Which slot a continuation step lands in depends on prefix similarity, not "idle first". (The basis for explaining E3/E4)
+- With `--cache-ram 0`, `--cache-idle-slots` is disabled (log `requires --cache-ram, disabling`); but KV inside a slot is still reused: the second request has `cached_tokens=30` (the chat template prefix).
+- `--no-mmap` **no longer exists** in this commit; it is replaced by `-lm none` (`-lm mmap|none|mlock|mmap+mlock`). For `--no-mmap` in handbook 5.3, use `-lm none`.
+- The default log level does not print `n_layer`/KV buffer; `-lv 4` is needed.
+- Whether the response carries `id_slot`: not checked (confirmed in 5.5).
 
-### 2026-10-19 Step 5 — 内存基线
-**5.1 每 token KV**:n_layer=28, n_head_kv=8, n_embd_head_k=n_embd_head_v=128 (n_head=24, n_embd_k_gqa=1024)。2×28×8×128×2 B = **114,688 B = 112 KiB/token**。16384 token → 1792 MiB,与日志 `CPU KV buffer size = 1792.00 MiB`(K 896 + V 896,f16)完全一致。compute buffer 82 MiB。
-**5.2/5.3 空闲与负载下的内存**(`results/raw/step5/`,采样器 `scripts/rss_footprint_sampler.sh`):
-- 配置 A 空闲:`footprint` 3789 MB;`ps` RSS 692 MB(这次)。
-- 负载:4 个并发请求(各 300 token,ignore_eos,共 85.8 s 完成),采样 639 点/411 s:**footprint 3789→3818 MB(仅 +29 MB)**;**RSS 592→2536→170 MB 剧烈起伏**(权重页被访问时涨,之后被 macOS 回收/压缩)。
-- 结论:Q1 空闲内存 ≈ 权重 + **整块 KV**(KV 在启动时一次性分配);Q2 footprint 与并发/负载几乎无关,**由启动配置决定**;Q3 RSS 在这台机器上不可信(同一配置不同次启动的 idle RSS 为 689 / 4678 / 3577 MB),**macOS 压缩内存不计入 RSS**。→ 5.5-C:**峰值内存主口径 = footprint**(同时仍记录 RSS 作次口径,并在报告里说明其不可靠的原因)。
-- ⚠️ 手册 5.3 的假设被证实:"内存由启动配置决定,而不是由负载决定"。`docs/action-guide.md` §3.3 关于"RSS 随负载增长"的假设应作废。
-**5.4 配置表**(idle_t0 = /health 就绪时;footprint 为 `footprint <pid>` 首行 Footprint):
-| 配置 | 参数 | 每 slot n_ctx | KV buffer | idle footprint | idle RSS (t0 → 20s 后) | cold start |
+### 2026-10-19 Step 5 — Memory baseline
+**5.1 KV per token**: n_layer=28, n_head_kv=8, n_embd_head_k=n_embd_head_v=128 (n_head=24, n_embd_k_gqa=1024). 2×28×8×128×2 B = **114,688 B = 112 KiB/token**. 16384 tokens → 1792 MiB, exactly matching the log `CPU KV buffer size = 1792.00 MiB` (K 896 + V 896, f16). compute buffer 82 MiB.
+**5.2/5.3 Memory when idle and under load** (`results/raw/step5/`, sampler `scripts/rss_footprint_sampler.sh`):
+- Config A idle: `footprint` 3789 MB; `ps` RSS 692 MB (this time).
+- Load: 4 concurrent requests (300 tokens each, ignore_eos, finishing in 85.8 s in total), sampled 639 points / 411 s: **footprint 3789→3818 MB (only +29 MB)**; **RSS fluctuates wildly 592→2536→170 MB** (it rises when weight pages are touched, then macOS reclaims/compresses them).
+- Conclusions: Q1 idle memory ≈ weights + **the whole KV** (KV is allocated in one go at startup); Q2 footprint is almost independent of concurrency/load and is **determined by the startup configuration**; Q3 RSS is untrustworthy on this machine (idle RSS of the same configuration over different launches is 689 / 4678 / 3577 MB), and **macOS compressed memory is not counted in RSS**. → 5.5-C: **primary peak-memory measure = footprint** (RSS is still recorded as the secondary measure, and the report explains why it is unreliable).
+- ⚠️ The assumption of handbook 5.3 is confirmed: "memory is determined by the startup configuration, not by load". The assumption in `docs/action-guide.md` §3.3 that "RSS grows with load" should be void.
+**5.4 Configuration table** (idle_t0 = when /health is ready; footprint is the first-line Footprint of `footprint <pid>`):
+| Config | Parameters | n_ctx per slot | KV buffer | idle footprint | idle RSS (t0 → after 20s) | cold start |
 |---|---|---|---|---|---|---|
 | A (mmap) | -np 4 -c 16384 --no-kv-unified | 4096 | 1792 MiB | 3789 MB | 3577 → 1210 MB | 5 s |
-| A (-lm none) | 同上 + `-lm none` | 4096 | 1792 MiB | **4083 MB** | 3712 → 985 MB | 8 s |
+| A (-lm none) | same as above + `-lm none` | 4096 | 1792 MiB | **4083 MB** | 3712 → 985 MB | 8 s |
 | B | -np 8 -c 32768 --no-kv-unified | 4096 | 3584 MiB | 5584 MB | 2763 → 1634 MB | 13 s |
-| C | -np 8 -c 16384 -kvu | **16384**(8 个 slot 共享同一池) | 1792 MiB | 3791 MB | 5028 → 3229 MB | 9 s |
-- mmap 与 `-lm none` 的 footprint 差 ≈ 294 MB:mmap 时约 300 MiB 的权重是文件映射,不计入 footprint(footprint 输出 "mapped file 677 MB clean")。→ footprint(mmap) 是下界,`-lm none` 是含全部权重的上界;写进报告。
-- 与 KV 的关系:A→B footprint 差 1795 MB ≈ KV 差 1792 MiB ✓;A→C footprint 基本不变 ✓。
-- C 配置的 /slots 报告每 slot n_ctx = 16384(池容量,不是独占容量);8 个 slot 共 16384 token 的池。
-- 冷启动数字都是模型已在页缓存里的情况;真正的冷盘启动未测。
-### ⚠️ 环境警告(2026-10-19 13:5x)
-- **Mac 在用电池,且 `lowpowermode=1`(低电量模式)**。冒烟与内存实验(只看 footprint)不受影响,但**速度类数据不可用**:单流解码仅 ≈7 tok/s(预期 M4 应明显更高),4 并发合计 ≈14 tok/s。**5.5 的校准必须插电并关闭低电量模式后再做**,否则 λ 网格、deadline、T_solo 都会偏。
+| C | -np 8 -c 16384 -kvu | **16384** (8 slots share one pool) | 1792 MiB | 3791 MB | 5028 → 3229 MB | 9 s |
+- The footprint difference between mmap and `-lm none` ≈ 294 MB: with mmap about 300 MiB of weights are file-mapped and not counted in footprint (footprint prints "mapped file 677 MB clean"). → footprint (mmap) is a lower bound and `-lm none` is an upper bound that includes all weights; put it in the report.
+- Relation to KV: A→B footprint difference 1795 MB ≈ KV difference 1792 MiB ✓; A→C footprint basically unchanged ✓.
+- /slots in config C reports n_ctx = 16384 per slot (the pool capacity, not exclusive capacity); 8 slots share a pool of 16384 tokens.
+- The cold-start numbers are all for the case where the model is already in the page cache; a true cold-disk start was not measured.
+### ⚠️ Environment warning (2026-10-19 13:5x)
+- **The Mac is on battery and `lowpowermode=1` (low-power mode)**. The smoke test and memory experiments (looking only at footprint) are unaffected, but **speed data is unusable**: single-stream decode is only ≈7 tok/s (an M4 should be clearly higher), and 4 concurrent total ≈14 tok/s. **The 5.5 calibration must be done after plugging in and turning off low-power mode**, otherwise the λ grid, deadline and T_solo will all be off.
 
-### 2026-10-19 Step 5.5 — 容量校准与口径定稿
-**条件:** 配置 A(`-np 4 -c 16384 --no-kv-unified -t 8 --cache-ram 0`),低电量模式已关,**但在电池供电下完成**(55%→49%,无热降频记录)。⚠️ Step 9 批跑前必须插电,并先用每类 3 个任务复测 T_solo,与下表偏差 >15% 就重新校准。此前低电量模式下解码仅 ~7 tok/s,关闭后 ~35 tok/s,说明速度对电源模式极敏感。
-数据:`results/raw/step55/calibration.json`、`calibrate.stdout`、`server.log`;脚本 `scripts/step55_calibrate.py`(粗原型,prompt 为种子随机词,每次请求内容不同;**不是** Step 7 的生成器)。
+### 2026-10-19 Step 5.5 — Capacity calibration and finalizing definitions
+**Conditions:** config A (`-np 4 -c 16384 --no-kv-unified -t 8 --cache-ram 0`), low-power mode off, **but done on battery power** (55%→49%, no thermal throttling recorded). ⚠️ Before the Step 9 batch the laptop must be plugged in, and T_solo must first be re-measured with 3 tasks per type; if it deviates from the table below by >15%, recalibrate. Earlier, in low-power mode, decode was only ~7 tok/s and after turning it off ~35 tok/s, showing that speed is extremely sensitive to the power mode.
+Data: `results/raw/step55/calibration.json`, `calibrate.stdout`, `server.log`; script `scripts/step55_calibrate.py` (a rough prototype; prompts are seeded random words, with different content for every request; **not** the Step 7 generator).
 
-**A.1 单流(3000 token prompt + 256 输出,3 次):** prefill 112–123 tok/s(≈26 s),decode 12.9–16.4 tok/s,总耗时 40–47 s。
-**A.2 聚合吞吐(8 个 256in/128out 请求):**
-| c | 墙钟 s | 聚合 tok/s | 单请求 decode tok/s | 平均 TTFT s |
+**A.1 Single stream (3000-token prompt + 256 outputs, 3 runs):** prefill 112–123 tok/s (≈26 s), decode 12.9–16.4 tok/s, total time 40–47 s.
+**A.2 Aggregate throughput (8 requests of 256in/128out):**
+| c | wall-clock s | aggregate tok/s | per-request decode tok/s | mean TTFT s |
 |---|---|---|---|---|
 | 1 | 46.9 | 21.8 | 33.0 | 2.0 |
 | 2 | 39.0 | 26.2 | 19.8 | 3.2 |
 | 4 | 31.2 | 32.8 | 15.0 | 6.5 |
-聚合吞吐随并发增长平缓(c=4 仅为 c=1 的 1.5×),无明显拐点,CPU 算力是主要约束;c=8 未测(假设 ≤ c=4)。
-**A.3 T_solo(c=1,各 3 次;prompt_tokens 为实测含 chat template):**
-| 类型 | prompt_tokens | 3 次耗时 s | 均值 |
+Aggregate throughput grows only gently with concurrency (c=4 is only 1.5× c=1), with no obvious knee, so CPU compute is the main constraint; c=8 was not measured (assumed ≤ c=4).
+**A.3 T_solo (c=1, 3 runs each; prompt_tokens is the measured value including the chat template):**
+| Type | prompt_tokens | 3-run times s | Mean |
 |---|---|---|---|
-| short (64 out) | 290(目标 256,+13%,含 ~32 template token) | 4.0 / 4.6 / 4.1 | 4.3 |
-| longctx (64 out) | 3035(目标 3000) | 33.5 / 34.2 / 37.3 | 35.0 |
+| short (64 out) | 290 (target 256, +13%, includes ~32 template tokens) | 4.0 / 4.6 / 4.1 | 4.3 |
+| longctx (64 out) | 3035 (target 3000) | 33.5 / 34.2 / 37.3 | 35.0 |
 | longgen (512 out) | 290 | 21.9 / 23.0 / 22.7 | 22.5 |
-| agent (4 步,tool delay 1.0 s,tool result 150 tok) | 835→1123→1411→1698 | 35.5 / 34.4 / 35.8 | 35.2(含 idle 3.0 s) |
-- decode 速度随上下文下降:31 tok/s(290 ctx)→ 26(longgen)→ 13(3000 ctx);agent 各步 27.8→21.5 tok/s。
-- 同一 slot 的 agent 续步前缀复用有效:`cached_tokens` = 30 → 962 → 1250 → 1538(c=1,idle 1 s 后仍在)。
-- **流式 chunk 与 /slots 都没有 id_slot**(chunk 键:choices, created, id, model, object, system_fingerprint, timings;slot 键:id, is_processing, n_ctx, speculative)。→ requests.jsonl 的 `id_slot` 字段只能留空,或从 server 日志(`slot launch_slot_: id N`)事后关联。
-- 要修正 Step 7 的 token 自检:short 目标 256 时实测 290,template 约 +32;生成器应以 `usage.prompt_tokens` 为准校准(±5%)。
+| agent (4 steps, tool delay 1.0 s, tool result 150 tok) | 835→1123→1411→1698 | 35.5 / 34.4 / 35.8 | 35.2 (including idle 3.0 s) |
+- Decode speed drops with context: 31 tok/s (290 ctx) → 26 (longgen) → 13 (3000 ctx); per step of the agent 27.8→21.5 tok/s.
+- Prefix reuse for agent continuation steps in the same slot works: `cached_tokens` = 30 → 962 → 1250 → 1538 (c=1, still there after 1 s idle).
+- **Neither streaming chunks nor /slots has id_slot** (chunk keys: choices, created, id, model, object, system_fingerprint, timings; slot keys: id, is_processing, n_ctx, speculative). → The `id_slot` field of requests.jsonl can only be left empty, or correlated afterwards from the server log (`slot launch_slot_: id N`).
+- Fix for the Step 7 token self-check: short with target 256 measures 290, the template adds about +32; the generator should calibrate (±5%) based on `usage.prompt_tokens`.
 
-**B. 预算(默认混合 40/20/20/20 = short/longctx/longgen/agent):**
+**B. Budget (default mix 40/20/20/20 = short/longctx/longgen/agent):**
 - S̄ = 0.4×4.3 + 0.2×35.0 + 0.2×22.5 + 0.2×35.2 = **20.26 s**
-- 有效并行度 P_eff = G(4)/G(1) = 1.5(c=2: 1.2);μ ≈ 1.5/20.26 = **0.074 task/s(4.45 task/min)**
-- λ 网格 {0.3, 0.6, 0.9, 1.2}×μ = **{0.022, 0.044, 0.067, 0.089} task/s**(平均到达间隔 45 / 22.5 / 15 / 11.3 s)。E1/E3/E4 默认用 λ = 0.9μ = **0.067**。
-- n_tasks = 100(下限,不再降),重复 3 次;每次重启 30 s。单次时长 = max(n/λ, n·S̄/P_eff(c)):λ=0.9μ 时 c=1/2/4/8 约 34.3 / 28.6 / 25.5 / 25.5 min。
-- 总机时(n=100, 3 次重复):E1 系列 S 5.7 h + E1 系列 U(c=4,8)2.5 h + E3(tool delay 0 与 3 s)2.5 h + E4(仅 cache_prompt=false,c=1 与 c=4)3.0 h + E5(λ=0.3/0.6/1.2μ,c=4)6.8 h = **20.6 h**。
-  - **这个数字的前提是复用:** E4 的 cache_prompt=true 用 E1 同配置那一次、E5 的 λ=0.9μ 用 E1 c=4 那一次,不重跑;不复用则 E5 为 8.1 h,E4 再 +3.0 h,合计 ≈ 25 h。
-  - 估计的不确定性:P_eff(8) 未测;c=8(系列 S)每 slot 仅 2048 token,longctx 会直接 ctx 超限、提前失败,会使该配置实际更短;校准在电池下完成。
-  - 如果实际超出,优先砍 E1 系列 U(只留 c=4,8 之一)和 E3 的第二个 delay 点,不降重复次数。
-- 低 λ 的运行由到达过程决定时长(0.3μ 一次 75 min,三次 3.75 h)——E5 是最贵的实验。
+- Effective parallelism P_eff = G(4)/G(1) = 1.5 (c=2: 1.2); μ ≈ 1.5/20.26 = **0.074 task/s (4.45 task/min)**
+- λ grid {0.3, 0.6, 0.9, 1.2}×μ = **{0.022, 0.044, 0.067, 0.089} task/s** (mean inter-arrival times 45 / 22.5 / 15 / 11.3 s). E1/E3/E4 use λ = 0.9μ = **0.067** by default.
+- n_tasks = 100 (lower bound, not reduced further), 3 repetitions; 30 s per restart. Duration of one run = max(n/λ, n·S̄/P_eff(c)): at λ=0.9μ, c=1/2/4/8 is about 34.3 / 28.6 / 25.5 / 25.5 min.
+- Total machine time (n=100, 3 repetitions): E1 series S 5.7 h + E1 series U (c=4,8) 2.5 h + E3 (tool delay 0 and 3 s) 2.5 h + E4 (only cache_prompt=false, c=1 and c=4) 3.0 h + E5 (λ=0.3/0.6/1.2μ, c=4) 6.8 h = **20.6 h**.
+  - **This number assumes reuse:** E4's cache_prompt=true uses the corresponding E1 run of the same configuration, and E5's λ=0.9μ uses the E1 c=4 run, with no rerun; without reuse E5 is 8.1 h and E4 another +3.0 h, about 25 h in total.
+  - Uncertainty of the estimate: P_eff(8) not measured; c=8 (series S) has only 2048 tokens per slot, so longctx will directly exceed ctx and fail early, which makes that configuration actually shorter; calibration was done on battery.
+  - If the actual time exceeds this, first cut E1 series U (keep only one of c=4,8) and the second delay point of E3, without reducing the number of repetitions.
+- Runs at low λ have their duration determined by the arrival process (one run at 0.3μ takes 75 min, three take 3.75 h) — E5 is the most expensive experiment.
 
-**C. 口径定稿(之后不再改):**
-| 项 | 定义 |
+**C. Finalized definitions (not to be changed afterwards):**
+| Item | Definition |
 |---|---|
-| 内存预算 B | 服务启动的总 KV token 数(`-c`);字节 = B × **114,688 B/token**(B=16384 → 1792 MiB) |
-| 峰值内存 | **主口径 = `footprint`**(采样期间 max);次口径 RSS 也记录但在报告中标注不可靠(macOS 压缩内存不计入 RSS,同配置 idle RSS 在 689–4678 MB 间波动,Step 5)。报告 `-lm none` 与默认 mmap 两个 footprint(差 ≈294 MB:mmap 时文件映射的权重不计入 footprint);主实验用默认 mmap,并写明 footprint 为下界。另报 KV 利用率 = live_tokens / B 的时间曲线与峰值(footprint 本身基本是平的,KV 利用率才反映负载) |
-| 并发 c 与 np | 不变量 c ≤ np;runner 启动校验 `/slots` 条数 ≥ c,否则拒绝运行 |
-| 超时 | 请求级 120 s;任务级(含排队)= min(300, 10×T_solo):short 43 s、longctx 300 s、longgen 225 s、agent 300 s。超时主动断开连接(Step 4 测试 7:≈0.7 s 释放 slot ✓)并记 `status=timeout` |
-| deadline / goodput | `deadline_s = 5 × T_solo(type)`:short 21 s、longctx 175 s、longgen 113 s;agent 按每个任务自己的步数/延迟计算:≈ 5 × (8.05 s × n_steps + Σ tool delay)(8.05 s = (35.2−3.0)/4 步)。dev 集上定好后冻结;goodput = deadline 内完成且 quality_pass 的任务数 ÷ 总时长 |
-| 冷启动 | 记 server 启动→/health ok 秒数(页缓存热时 5–14 s,冷盘未测)与首个请求延迟;每次运行前 3 个任务标 `warmup=true`,稳态统计排除(原始日志保留) |
-| 失败分类 | ok / timeout / error_ctx_exceeded / error_http / error_other;分母 = 全部已提交任务 |
+| Memory budget B | Total KV token count at server start (`-c`); bytes = B × **114,688 B/token** (B=16384 → 1792 MiB) |
+| Peak memory | **Primary measure = `footprint`** (max during sampling); the secondary measure RSS is also recorded but marked unreliable in the report (macOS compressed memory is not counted in RSS, and idle RSS of the same configuration fluctuates between 689–4678 MB, Step 5). The report gives both footprints for `-lm none` and the default mmap (difference ≈294 MB: file-mapped weights are not counted in footprint under mmap); the main experiments use the default mmap and state that footprint is a lower bound. Also report the time curve and peak of KV utilization = live_tokens / B (footprint itself is basically flat; KV utilization is what reflects load) |
+| Concurrency c and np | Invariant c ≤ np; at startup the runner verifies `/slots` count ≥ c, otherwise it refuses to run |
+| Timeouts | Request-level 120 s; task-level (including queueing) = min(300, 10×T_solo): short 43 s, longctx 300 s, longgen 225 s, agent 300 s. On timeout the connection is closed actively (Step 4 test 7: ≈0.7 s to release the slot ✓) and `status=timeout` is recorded |
+| deadline / goodput | `deadline_s = 5 × T_solo(type)`: short 21 s, longctx 175 s, longgen 113 s; agents are computed from each task's own number of steps/delays: ≈ 5 × (8.05 s × n_steps + Σ tool delay) (8.05 s = (35.2−3.0)/4 steps). Fixed on the dev set and then frozen; goodput = number of tasks completed within the deadline with quality_pass ÷ total duration |
+| Cold start | Record seconds from server start → /health ok (5–14 s with a warm page cache, cold disk not measured) and the first request's latency; the first 3 tasks of each run are marked `warmup=true` and excluded from steady-state statistics (raw logs kept) |
+| Failure classification | ok / timeout / error_ctx_exceeded / error_http / error_other; denominator = all submitted tasks |
 
-**D. 内存轴实验设计:** Step 5 证实 footprint 由启动配置决定(与负载无关),所以按手册两个系列都保留:
-- 系列 S(B=16384 固定,np=c,c∈{1,2,4,8},每 slot 容量 = 16384/c):c=8 → 2048 token/slot,3035-token 的 longctx 必然超限(确定性失败,是被测现象);c=4 → 4096 刚好容纳 agent 末步 1698+128。
-- 系列 U(`-kvu -np 8 -c 16384`,c∈{4,8}):观察池耗尽时的行为(defer/报错/截断)。注意 `-kvu` 下 /slots 对每个 slot 都报 n_ctx=16384(池容量)。
-- 时间紧时先做 S,再做 U 的 c∈{4,8}(与上面预算一致)。
+**D. Design of the memory-axis experiments:** Step 5 confirmed that footprint is determined by the startup configuration (independent of load), so both series from the handbook are kept:
+- Series S (B=16384 fixed, np=c, c∈{1,2,4,8}, capacity per slot = 16384/c): c=8 → 2048 tokens/slot, the 3035-token longctx necessarily exceeds the limit (a deterministic failure, which is a measured phenomenon); c=4 → 4096 just fits the last agent step 1698+128.
+- Series U (`-kvu -np 8 -c 16384`, c∈{4,8}): observe behavior when the pool is exhausted (defer/error/truncate). Note that under `-kvu`, /slots reports n_ctx=16384 (the pool capacity) for every slot.
+- If time is tight, do S first, then c∈{4,8} of U (consistent with the budget above).
 
-### 2026-10-19 #3 补充 — prefill 期间断连的 slot 释放耗时(真机)
-配置 `-np 1 -c 4096`(`scripts/start_server.sh 1 4096`),单 slot 所以不用归因。prompt = longctx 3000 token(每次加随机前缀,避免整段命中 slot 里的 KV)。脚本 `scripts/measure_slot_release.py`,原始数据 `results/raw/slot_release/`。断连 = 客户端关闭流式连接;释放 = `/slots` 的 `is_processing` 回到 false(50 ms 轮询)。
-| 断连时刻(发出后) | 断连 → 释放 | 发出 → 释放 |
+### 2026-10-19 #3 addendum — Slot release time after a disconnect during prefill (real machine)
+Config `-np 1 -c 4096` (`scripts/start_server.sh 1 4096`), a single slot so no attribution is needed. prompt = longctx 3000 tokens (a random prefix is added each time to avoid the whole prompt hitting KV in the slot). Script `scripts/measure_slot_release.py`, raw data `results/raw/slot_release/`. Disconnect = the client closes the streaming connection; release = `is_processing` in `/slots` returns to false (50 ms polling).
+| Disconnect time (after sending) | Disconnect → release | Send → release |
 |---|---|---|
-| prefill 1 s(4 次) | 16.3 / 17.9 / 18.0 / 18.6 s | 约 17–19 s |
+| prefill 1 s (4 times) | 16.3 / 17.9 / 18.0 / 18.6 s | about 17–19 s |
 | prefill 5 s | 31.8 s | 36.8 s |
 | prefill 10 s | 22.1 s | 32.1 s |
 | prefill 15 s | 11.8 s | 26.8 s |
 | prefill 20 s | 7.9 s | 27.9 s |
 | prefill 24 s | 6.6 s | 30.6 s |
-| decode(首个 token 后 1 s) | 0.11 s | — |
-- **decode 期间断连:** 立即释放(0.11 s),与 Step 4 测试 7 一致。上面"超时主动断连 ≈0.7 s 释放 slot ✓"**只对 decode 阶段成立**。
-- **prefill 期间断连:** slot 一直忙到 prefill 结束。1 s 断连时 server 当场记 `cancel task`,但要等第一个 2048-token 批处理结束才 `release`(`n_tokens ≈ 2078`),约 17–19 s;5–24 s 断连时 `cancel task` 要等整个 prompt 处理完才出现(`release` 时 `n_tokens ≈ 3022`),发出→释放 ≈ 27–37 s ≈ 完整 prefill 时间。
-- **没弄清的:** 为什么 1 s 断连被立刻发现而 ≥5 s 的要等到 prefill 结束才被发现(只有现象,没验证机制)。样本很少(单个 prompt、每个时刻 1 次,1 s 重复 4 次),且在电池供电下测。
-- **对 runner 的影响:** 长 prompt(longctx)超时断连后,server 的 slot 可能还被占 10–30 s,而 runner 在断连瞬间就释放了自己的并发名额,下一个请求可能撞上 server 内部排队(ADR 0003 担心的情况)。runner 目前不检测这一点。
+| decode (1 s after the first token) | 0.11 s | — |
+- **Disconnect during decode:** released immediately (0.11 s), consistent with Step 4 test 7. The statement above that "active disconnect on timeout releases the slot in ≈0.7 s ✓" **holds only for the decode phase**.
+- **Disconnect during prefill:** the slot stays busy until prefill ends. For a 1 s disconnect the server logs `cancel task` on the spot, but `release` only happens after the first 2048-token batch finishes (`n_tokens ≈ 2078`), about 17–19 s; for 5–24 s disconnects, `cancel task` appears only after the whole prompt has been processed (`n_tokens ≈ 3022` at `release`), send → release ≈ 27–37 s ≈ the full prefill time.
+- **Not understood:** why a 1 s disconnect is noticed immediately while those at ≥5 s are noticed only after prefill ends (only the phenomenon, the mechanism was not verified). The sample is very small (a single prompt, 1 run per moment, 4 repetitions at 1 s), and it was measured on battery power.
+- **Implication for the runner:** after a timeout disconnect of a long prompt (longctx), the server's slot may stay busy for another 10–30 s, while the runner released its own concurrency slot at the moment of disconnect, so the next request may hit server-internal queueing (the situation ADR 0003 worries about). The runner currently does not detect this.
 
-### 2026-10-30 #7 线程数对比 — 冻结 `-t 8`
-配置 `-np 4 -c 16384 --no-kv-unified --cache-ram 0`,插电、低电量模式关闭、无热降频记录。交错顺序 `8 4 10 8 4 10`,每档之间冷却 180 s;每档 short ×3、longctx ×3 单流 + c=4 聚合吞吐(8 个请求 × 128 token)。脚本 `scripts/prebatch_check.py threads`,原始数据 `results/raw/prebatch/threads.json`,决策与剔除记录 `threads_decision.json`。
-| `-t` | short (s) | longctx (s) | c=4 聚合 (tok/s) |
+### 2026-10-30 #7 Thread count comparison — freeze `-t 8`
+Config `-np 4 -c 16384 --no-kv-unified --cache-ram 0`, on AC power, low-power mode off, no thermal throttling recorded. Interleaved order `8 4 10 8 4 10`, 180 s cooldown between levels; for each level short ×3, longctx ×3 single-stream + c=4 aggregate throughput (8 requests × 128 tokens). Script `scripts/prebatch_check.py threads`, raw data `results/raw/prebatch/threads.json`, decision and exclusion record `threads_decision.json`.
+| `-t` | short (s) | longctx (s) | c=4 aggregate (tok/s) |
 |---|---|---|---|
-| 8 | 3.06–3.59(5 个) | 25.4–26.8(6 个) | 39.7 / 40.7 |
-| 4 | 3.90–4.07(6 个) | 33.4–35.3(6 个) | 31.1 / 30.6 |
-| 10 | 2.93–3.10(6 个) | 24.3–26.0(6 个) | 36.7(1 个) |
-- 相对 `-t 8` 的几何平均加速比:`-t 4` 0.78,`-t 10` 1.006。`-t 10` 没有比 `-t 8` 快 10% → 按规则保持 `-t 8`;`-t 4` 明显更慢(单流 +30%、吞吐 −20%)。
-- **剔除了两个被系统睡眠污染的样本**(没有改原始文件):第 4 档 `-t 8` 的第一个 short(647 s)和第 6 档 `-t 10` 的 c=4(1.0 tok/s)。证据:`pmset -g log` 显示 21:32:46 空闲睡眠到 21:43:30(644 s)、21:55:37 到 22:10:37(900 s);server 日志里 261 token 的 prompt eval 用了 644.6 s,4 个并发请求各 943 s。**插电也会空闲睡眠**,此前没有用 `caffeinate`。`prebatch_check.py` 现在启动时自带 `caffeinate -is -w <pid>`,后面的阶段和正式批跑都要如此。
-- `-t 10` 的 c=4 只有 1 个有效样本,所以它与 `-t 8` 的吞吐比较(36.7 vs 40.2)证据较弱;但单流两者差 <3%,结论不依赖它。
-- 第一轮(`threads_run1_confounded.*`)同配置前后差近一倍,原因没查清(可能是后台进程或降频),不用于决策;第二轮同配置前后一致(`-t 8` longctx 26.1 vs 26.4,`-t 4` 34.5 vs 34.5)。
-- 冻结:`configs/server.json` = `{"threads": 8}`。
+| 8 | 3.06–3.59 (5) | 25.4–26.8 (6) | 39.7 / 40.7 |
+| 4 | 3.90–4.07 (6) | 33.4–35.3 (6) | 31.1 / 30.6 |
+| 10 | 2.93–3.10 (6) | 24.3–26.0 (6) | 36.7 (1) |
+- Geometric-mean speedup relative to `-t 8`: `-t 4` 0.78, `-t 10` 1.006. `-t 10` is not 10% faster than `-t 8` → per the rule keep `-t 8`; `-t 4` is clearly slower (single stream +30%, throughput −20%).
+- **Two samples contaminated by system sleep were excluded** (the raw files were not modified): the first short of `-t 8` in the 4th level (647 s) and c=4 of `-t 10` in the 6th level (1.0 tok/s). Evidence: `pmset -g log` shows idle sleep from 21:32:46 to 21:43:30 (644 s) and from 21:55:37 to 22:10:37 (900 s); in the server log prompt eval of a 261-token prompt took 644.6 s, and 4 concurrent requests took 943 s each. **Idle sleep also happens on AC power**, and `caffeinate` had not been used before. `prebatch_check.py` now starts with its own `caffeinate -is -w <pid>`, and later stages and the official batch must do the same.
+- The c=4 of `-t 10` has only 1 valid sample, so its throughput comparison with `-t 8` (36.7 vs 40.2) is weak evidence; but the two differ by <3% in single stream, so the conclusion does not depend on it.
+- In the first round (`threads_run1_confounded.*`) the same configuration differed by nearly 2× between before and after, the cause was not found (possibly background processes or throttling), and it is not used for decisions; in the second round the same configuration was consistent before and after (`-t 8` longctx 26.1 vs 26.4, `-t 4` 34.5 vs 34.5).
+- Frozen: `configs/server.json` = `{"threads": 8}`.
 
-### 2026-10-30 #7 T_solo 复测(`-t 8`、插电)— 全部类别比 Step 5.5 快 23–29%,重算
-配置同上(`-np 4 -c 16384 --no-kv-unified -t 8`),`caffeinate` 下运行,无热降频记录;每类 3 次单流。脚本 `scripts/prebatch_check.py tsolo`,原始数据 `results/raw/prebatch/tsolo.json`。
-| 类别 | Step 5.5(电池) | 复测 3 次 (s) | 均值 | 偏差 |
+### 2026-10-30 #7 T_solo re-measurement (`-t 8`, AC power) — all types 23–29% faster than Step 5.5, recomputed
+Same configuration as above (`-np 4 -c 16384 --no-kv-unified -t 8`), run under `caffeinate`, no thermal throttling recorded; 3 single-stream runs per type. Script `scripts/prebatch_check.py tsolo`, raw data `results/raw/prebatch/tsolo.json`.
+| Type | Step 5.5 (battery) | Re-measurement, 3 runs (s) | Mean | Deviation |
 |---|---|---|---|---|
 | short | 4.3 | 3.37 / 3.13 / 3.06 | 3.19 | −26% |
 | longctx | 35.0 | 26.1 / 26.3 / 26.7 | 26.38 | −25% |
 | longgen | 22.5 | 16.4 / 15.5 / 15.9 | 15.95 | −29% |
-| agent(4 步,tool delay 1.0 s) | 35.2 | 28.0 / 27.7 / 27.8 | 27.8(每步 6.20 s) | −23%(每步) |
-- 四类都超过 15% → 按验收标准重算。**根因基本是电源:** Step 5.5 在电池下测,现在插电;与记录本此前"速度对电源状态极敏感"的观察一致。
-- `configs/t_solo.json` 已更新为新表(`agent_per_step_s` = 6.2),`configs/server.json` = `{"threads": 8}`。
-- 新预算(默认混合 40/20/20/20,仍假设 P_eff(4)=1.5):S̄ = 15.30 s,μ ≈ **0.098 task/s**,λ 网格 {0.3, 0.6, 0.9, 1.2}×μ = **{0.029, 0.059, 0.088, 0.118} task/s**(旧:S̄ 20.26 s、μ 0.074、λ 0.022–0.089)。
-- 新 deadline = 5 × T_solo:short 16.0 s、longctx 131.9 s、longgen 79.8 s、agent 5 × (6.2 × 步数 + Σ tool delay);任务级超时公式 min(300, 10 × T_solo) 给出 short 32 s、longctx 264 s、longgen 160 s。**已生成的 `workloads/dev/default_s1.json` 里的 deadline 是旧的,#8 冻结 deadline 时必须重新生成。**
-- 总机时需按新 S̄ 和 c=8 的 P_eff 重估(等 c=8 测完再做)。
-- 测试:`test_deadline_is_five_times_t_solo_from_input_table` 原先读共享的 `configs/t_solo.json` 并写死旧数值,重新校准必然失败 → 改成自带固定的表。
+| agent (4 steps, tool delay 1.0 s) | 35.2 | 28.0 / 27.7 / 27.8 | 27.8 (6.20 s per step) | −23% (per step) |
+- All four types exceed 15% → recompute per the acceptance criterion. **The root cause is basically the power source:** Step 5.5 was measured on battery and now we are plugged in; consistent with the earlier observation in this notebook that "speed is extremely sensitive to power state".
+- `configs/t_solo.json` has been updated to the new table (`agent_per_step_s` = 6.2), and `configs/server.json` = `{"threads": 8}`.
+- New budget (default mix 40/20/20/20, still assuming P_eff(4)=1.5): S̄ = 15.30 s, μ ≈ **0.098 task/s**, λ grid {0.3, 0.6, 0.9, 1.2}×μ = **{0.029, 0.059, 0.088, 0.118} task/s** (old: S̄ 20.26 s, μ 0.074, λ 0.022–0.089).
+- New deadline = 5 × T_solo: short 16.0 s, longctx 131.9 s, longgen 79.8 s, agent 5 × (6.2 × steps + Σ tool delay); the task-level timeout formula min(300, 10 × T_solo) gives short 32 s, longctx 264 s, longgen 160 s. **The deadlines in the already generated `workloads/dev/default_s1.json` are the old ones and must be regenerated when #8 freezes deadlines.**
+- Total machine time must be re-estimated with the new S̄ and the P_eff of c=8 (do it after c=8 is measured).
+- Test: `test_deadline_is_five_times_t_solo_from_input_table` used to read the shared `configs/t_solo.json` and hard-code the old values, so recalibration would inevitably fail it → changed to bring its own fixed table.
 
-### 2026-10-30 #7 c=8 聚合吞吐
-`-np 8 -c 16384 --no-kv-unified -t 8`,插电、`caffeinate`、无热降频记录;交替测 c=4 / c=8,每个 16 个请求 × 128 token,2 轮。脚本 `prebatch_check.py c8`,原始数据 `results/raw/prebatch/c8.json`。
-| 轮次 | c=4 | c=8 |
+### 2026-10-30 #7 c=8 aggregate throughput
+`-np 8 -c 16384 --no-kv-unified -t 8`, AC power, `caffeinate`, no thermal throttling recorded; alternately measured c=4 / c=8, 16 requests × 128 tokens each, 2 rounds. Script `prebatch_check.py c8`, raw data `results/raw/prebatch/c8.json`.
+| Round | c=4 | c=8 |
 |---|---|---|
 | 1 | 42.3 tok/s | 42.9 tok/s |
 | 2 | 34.3 tok/s | 42.6 tok/s |
-| 均值 | 38.3 | 42.8 |
-- 第 1 轮配对比值 1.014;均值比值 1.116 是第 2 轮 c=4 偶然变慢(59.7 s vs 48.4 s)造成的,**不能据此说 c=8 更快**。结论:c=8 吞吐不低于 c=4,预算里"P_eff(8) = P_eff(4)"的假设成立。
-- 样本只有 2 轮,c=4 两轮差 20%。P_eff(4) = 1.5(c=4 对 c=1)仍是旧的电池数据,插电后未重测。
+| Mean | 38.3 | 42.8 |
+- The paired ratio in round 1 is 1.014; the mean ratio of 1.116 is caused by c=4 being accidentally slow in round 2 (59.7 s vs 48.4 s), and **we cannot conclude from it that c=8 is faster**. Conclusion: c=8 throughput is no lower than c=4, and the budget assumption "P_eff(8) = P_eff(4)" holds.
+- There are only 2 rounds, and the two rounds of c=4 differ by 20%. P_eff(4) = 1.5 (c=4 vs c=1) is still the old battery data and was not re-measured on AC power.
 
-### 2026-10-30 #7 冷盘启动
-`sudo purge` 后立刻 `prebatch_check.py cold`(在系统终端里连着执行),`-np 4 -t 8`,2.0 GB 模型(mmap)。原始数据 `results/raw/prebatch/cold_start.json`。
-| | `/health` 就绪 | server 日志 "model loaded" |
+### 2026-10-30 #7 Cold-disk start
+Right after `sudo purge`, run `prebatch_check.py cold` (executed back to back in a system terminal), `-np 4 -t 8`, 2.0 GB model (mmap). Raw data `results/raw/prebatch/cold_start.json`.
+| | `/health` ready | server log "model loaded" |
 |---|---|---|
-| 冷(purge 后) | 2.64 s | 2.18 s |
-| 热(紧接着再启动) | 1.60 s | 1.18 s |
-- 冷启动只比热多约 1 s,与 2 GB 文件从 SSD 读一遍相符,推断 purge 生效(没有别的直接证据)。样本 1 对 1。
-- 与 Step 5.5 记录的"页缓存热时 5–14 s"不一致:现在热启动只要 1.6 s。没查原因(旧值测量时的电源状态/负载不同?),只记录事实。每次 Run 前重启的开销因此比预算里假设的 30 s 小得多。
+| Cold (after purge) | 2.64 s | 2.18 s |
+| Warm (restart right after) | 1.60 s | 1.18 s |
+- A cold start is only about 1 s slower than a warm one, consistent with reading a 2 GB file from the SSD once, so purge is inferred to have worked (no other direct evidence). Sample 1 vs 1.
+- Inconsistent with the "5–14 s with a warm page cache" recorded in Step 5.5: a warm start now takes only 1.6 s. The cause was not investigated (different power state/load when the old value was measured?); only the fact is recorded. The restart overhead before each Run is therefore much smaller than the 30 s assumed in the budget.
 
-### 2026-10-30 #7 小结
-- 冻结:`-t 8`(`configs/server.json`),T_solo 新表(`configs/t_solo.json`),μ ≈ 0.098 task/s,λ ∈ {0.029, 0.059, 0.088, 0.118}。
-- 总机时按 S̄ 的比例近似缩放(15.30 / 20.26 = 0.755):约 20.6 h → **≈ 15.6 h**(粗估,没有逐项重算;P_eff(4) 与 P_eff(8) 都沿用 1.5)。若不复用 E4 / E5 的数据则约 19 h。
-- #8 必须:用新 T_solo 重新生成 Dev workload 并冻结 deadline(`workloads/dev/default_s1.json` 里是旧值)。
+### 2026-10-30 #7 Summary
+- Frozen: `-t 8` (`configs/server.json`), the new T_solo table (`configs/t_solo.json`), μ ≈ 0.098 task/s, λ ∈ {0.029, 0.059, 0.088, 0.118}.
+- Total machine time scaled approximately in proportion to S̄ (15.30 / 20.26 = 0.755): about 20.6 h → **≈ 15.6 h** (rough estimate, not recomputed item by item; P_eff(4) and P_eff(8) both keep 1.5). About 19 h without reusing the data of E4 / E5.
+- #8 must: regenerate the Dev workload with the new T_solo and freeze deadlines (`workloads/dev/default_s1.json` has the old values).
 
-### 2026-10-31 #8 冒烟(真 llama-server,30 Task,c=2)
-`-np 4 -c 16384 --no-kv-unified -t 8`,插电、低电量模式关、`caffeinate` 下运行。`runner --c 2 --lambda 0.06 --n-tasks 30`,原始数据 `results/raw/smoke_8/run/`(server 日志 `smoke_8/server.log`,整个 #8 期间共用一份)。
-- **三类日志 + manifest 齐全;`tasks.jsonl` 恰好 30 行**(`requests.jsonl` 43 行)。`manifest.json` 的 `errors` 为空。
-- **`--timeout 1`**(`smoke_8/timeout1`,8 个 Task、λ=0.5):`tasks.jsonl` 8 行全是 `status=timeout`,`requests.jsonl` 8 行 `timeout/request_timeout`,没有丢 Task;20 s 后 `/slots` 四个都空闲。
-- **真 server 下的采样器:** `footprint_mb` 3792–3872(1244 次采样,无一次 `error`)、`live_tokens` 0–6121、`requests_processing` 0–3、每 slot `is_processing` 都有;启动前 `/slots` 条数校验通过。
-- **这次 30 个 Task 里 16 个 timeout,不是 bug:** λ=0.06 对 c=2 过载(粗估 c=2 的容量约 0.07 task/s,没测;前 30 个里重 Task 偏多),排队 100–250 s,命中任务级超时(short 32 s、其余按 10×T_solo 取 300 封顶)。冒烟只用来验证日志不丢行。
-- **`requests_processing` 到过 3 > c=2:** 超时断连的请求若还在 prefill,server 的 slot 继续忙到 prefill 结束(见 2026-10-19 #3 补充),runner 已经释放了并发名额,下一个请求就和它重叠。与已有观察一致,不矛盾。
-- **needle 失败的根因(冒烟发现):** 冒烟里 9 个 longctx 有 3 个 `quality_pass=false`。直接对同样的 prompt 重放(temperature 0):Llama-3.2-3B 回 "I can't provide information or guidance on illegal or harmful activities ..."——**"secret key" 触发安全拒答**。把 "The secret key is" / "What is the secret key ..." 换成 "The reference code is" / "What is the reference code ... Reply with the code only." 后,3 个失败 prompt 全部答对。已改 `src/runner/gen_workload.py`(`RECALL_QUESTION`、needle 句)并重新生成 Dev workload;`tests/test_workload.py` 里的措辞同步。冒烟用的是改之前的 workload(sha `df59750…`)。
+### 2026-10-31 #8 Smoke test (real llama-server, 30 Tasks, c=2)
+`-np 4 -c 16384 --no-kv-unified -t 8`, on AC power, low-power mode off, run under `caffeinate`. `runner --c 2 --lambda 0.06 --n-tasks 30`, raw data `results/raw/smoke_8/run/` (server log `smoke_8/server.log`, one shared copy for the whole of #8).
+- **Three kinds of logs + manifest are complete; `tasks.jsonl` has exactly 30 lines** (`requests.jsonl` 43 lines). `errors` in `manifest.json` is empty.
+- **`--timeout 1`** (`smoke_8/timeout1`, 8 Tasks, λ=0.5): all 8 lines of `tasks.jsonl` are `status=timeout`, 8 lines of `requests.jsonl` are `timeout/request_timeout`, no Task dropped; 20 s later all four in `/slots` are idle.
+- **The sampler against the real server:** `footprint_mb` 3792–3872 (1244 samples, not a single `error`), `live_tokens` 0–6121, `requests_processing` 0–3, per-slot `is_processing` all present; the `/slots` count check before startup passed.
+- **16 of the 30 Tasks timed out, which is not a bug:** λ=0.06 is overload for c=2 (rough capacity of c=2 about 0.07 task/s, not measured; the first 30 have many heavy Tasks), queueing 100–250 s hit the task-level timeout (short 32 s, others 10×T_solo capped at 300). The smoke test is only used to verify that logs do not lose rows.
+- **`requests_processing` reached 3 > c=2:** if a request disconnected on timeout is still in prefill, the server's slot stays busy until prefill ends (see the 2026-10-19 #3 addendum); the runner has already released the concurrency slot, and the next request overlaps with it. Consistent with existing observations, no contradiction.
+- **Root cause of the needle failures (found in the smoke test):** in the smoke test 3 of 9 longctx had `quality_pass=false`. Replaying the same prompts directly (temperature 0): Llama-3.2-3B replied "I can't provide information or guidance on illegal or harmful activities ..." — **"secret key" triggers a safety refusal**. After replacing "The secret key is" / "What is the secret key ..." with "The reference code is" / "What is the reference code ... Reply with the code only.", all 3 failing prompts were answered correctly. `src/runner/gen_workload.py` (`RECALL_QUESTION`, the needle sentence) was changed and the Dev workload regenerated; the wording in `tests/test_workload.py` was updated accordingly. The smoke test used the workload from before the change (sha `df59750…`).
 
-### 2026-10-31 #8 agent 续步的前缀复用有没有被别的短请求打断(调研补充条件)
-工具:`python -m src.analysis.slot_trace`(新,有单测):按 `t_start` 把 server 日志里每个请求的 `selected slot by LRU/LCP` + `launch_slot_` 一一对回 `requests.jsonl`(OAI 响应没有 `id_slot`)。数量对不上就拒绝对应,日志共用时用 `--skip`。对应关系的自检:工具内置用 server 释放 slot 时的 `n_tokens` 核对每个 ok 请求的 prompt+输出 token 数(对不上就报错;冒烟 35、基线 137、补测 42 个全部 0 不一致,包括 c=2 的冒烟);另外第 3 步起 `cached_tokens` ≈ 上一步完整上下文且 100% 回到同一个 slot。限制:只对 ok 且到过 server 的请求;没到 server 就被取消的请求会让数量对不上,工具拒绝而不是猜。
-- **基线(c=1,agent 21 个,含超时前已发出的步骤)的第 2 步:** 27 次里 23 次回到原 slot(`cached_tokens` ≈ 927/928);4 次换 slot,`cached_tokens=30`(只剩 chat template 前缀)。第 3–6 步 23/23、13/13、8/8、3/3 都回原 slot。
-- **明确的短请求打断实例:** `t0075`(agent,status ok)第 1 步在 slot 1;Tool delay 期间 `t0076`(short)到达,**按 LCP 选中 slot 1,`f_sim_best = 0.125`(> 0.100 thold)**,覆盖了 agent 的前缀;第 2 步只能 LRU 选 slot 2,`cached_tokens=30`。这就是调研预测的机制,**本次第一次直接观察到**。
-- **longgen(256 token prompt)同样会触发:** 基线里 `t0011/t0037` 等 longgen 以 f_sim 0.117–0.125 按 LCP 抢占别人的 slot,不只是 short。
-- **另外 3 次(`t0009/t0010/t0034`,都在排队突发里):** agent 的第 2 步重新排到 FIFO 队尾,等到时中间已经有 4–5 次别的启动(含 LCP 覆盖和 LRU 轮转),4 个 slot 基本被轮了一遍。冒烟(c=2 严重过载)里 7 个 agent 的第 2 步有 6 个是这样(中间 4–9 次启动),只有 `t0029` 命中。**只有中间启动数 <3 时原 slot 才可能幸存**(`t0029`:3 次启动落在另外 3 个 slot 上,第 2 步 LCP 命中)。
-- **对 E3/E4 的含义:** 混合负载下 agent 续步的 `cached_tokens` 是否命中,取决于 Tool delay 期间 / 排队期间别的请求怎么占 slot,不是 `cache_prompt` 开关本身;分析时要按这个机制解释,不要把 `cached_tokens=30` 都当作 `cache_prompt=false` 的效果。
-- 样本量小(单个 seed、c=1 基线 + 一次过载冒烟),没做统计,只是机制验证。
+### 2026-10-31 #8 Was prefix reuse of agent continuation steps interrupted by other short requests (research addendum)
+Tool: `python -m src.analysis.slot_trace` (new, with unit tests): maps each request's `selected slot by LRU/LCP` + `launch_slot_` in the server log one-to-one back onto `requests.jsonl` by `t_start` (OAI responses have no `id_slot`). It refuses to map if the counts do not match, and uses `--skip` when the log is shared. Self-check of the mapping: the tool has a built-in check of each ok request's prompt+output token count against the `n_tokens` when the server releases the slot (it errors on mismatch; smoke 35, baseline 137, rerun 42 all had 0 inconsistencies, including the c=2 smoke test); in addition, from step 3 on `cached_tokens` ≈ the complete context of the previous step and 100% return to the same slot. Limitation: only for ok requests that reached the server; requests cancelled before reaching the server make the counts mismatch, and the tool refuses rather than guesses.
+- **Step 2 of the baseline (c=1, 21 agents, including steps already sent before timeout):** in 23 of 27 cases it returned to the original slot (`cached_tokens` ≈ 927/928); 4 changed slot, with `cached_tokens=30` (only the chat template prefix left). Steps 3–6 returned to the original slot 23/23, 13/13, 8/8, 3/3.
+- **A clear instance of interruption by a short request:** `t0075` (agent, status ok) step 1 was in slot 1; during the Tool delay `t0076` (short) arrived and **selected slot 1 by LCP, `f_sim_best = 0.125` (> 0.100 thold)**, overwriting the agent's prefix; step 2 could only select slot 2 by LRU, `cached_tokens=30`. This is exactly the mechanism predicted by the research, **observed directly for the first time here**.
+- **longgen (256-token prompt) triggers it as well:** in the baseline, longgen such as `t0011/t0037` preempt other slots by LCP at f_sim 0.117–0.125, not just short.
+- **Another 3 cases (`t0009/t0010/t0034`, all in queueing bursts):** step 2 of the agent was re-queued at the tail of the FIFO, and by the time it was served there had been 4–5 other launches in between (including LCP overwrites and LRU rotation), so the 4 slots had basically all been rotated once. In the smoke test (c=2, heavily overloaded), 6 of the 7 agent step-2s were like this (4–9 launches in between), and only `t0029` hit. **The original slot can survive only when fewer than 3 launches occur in between** (`t0029`: 3 launches landed on the other 3 slots, and step 2 hit by LCP).
+- **Implication for E3/E4:** in a mixed workload whether `cached_tokens` of an agent continuation step hits depends on how other requests occupy slots during the Tool delay / queueing, not on the `cache_prompt` switch itself; the analysis must explain it with this mechanism, and not treat every `cached_tokens=30` as an effect of `cache_prompt=false`.
+- The sample is small (a single seed, a c=1 baseline + one overloaded smoke test) and no statistics were done; it is only a mechanism check.
 
-### 2026-10-31 #8 单流(c=1)质量基线 — 每类 ≥ 90%,deadline 冻结
-Dev workload(`workloads/dev/default_s1.json`,seed 1,100 个 Task:short 39 / longctx 21 / longgen 19 / agent 21)。`runner --c 1 --lambda 0.029 --policy fifo`,运行 3616 s,插电,无 ≥5 s 的采样缺口,`manifest.errors` 为空。原始数据 `results/raw/baseline_8/run/`。
-- **第一遍 18 个 Task 超时(排队,不是质量):** Poisson 突发使 c=1 下排队,short 都卡在 32 s 的任务级超时(11 个)、agent 300 s(6 个)、longgen 160 s(1 个);`requests.jsonl` 里没有一个请求本身报错。完成的 Task 里 pass:short 28/28、longctx 20/21、longgen 18/18、agent 14/15。
-- **补测:** 把这 18 个 Task 单独抽成子集(`baseline_8/rerun_workload/timeouts_subset.json`,`unit_gap_s` 全改成 1,λ=1/70 即固定 70 s 间隔,保证无排队;sha `8eb6432…`,**不是**冻结的 workload),`baseline_8/rerun/`,18 个全部 ok,`requests_processing` 最大 1,无睡眠缺口。每个 Task 的结果取「第一遍 ok 就用第一遍,否则用补测」。
-- **单流 quality pass 率(Phase 2 的质量基线):**
-  | 类别 | 个数 | pass | 率 |
+### 2026-10-31 #8 Single-stream (c=1) quality baseline — every type ≥ 90%, deadlines frozen
+Dev workload (`workloads/dev/default_s1.json`, seed 1, 100 Tasks: short 39 / longctx 21 / longgen 19 / agent 21). `runner --c 1 --lambda 0.029 --policy fifo`, ran for 3616 s, on AC power, no sampling gap ≥5 s, `manifest.errors` empty. Raw data `results/raw/baseline_8/run/`.
+- **In the first pass 18 Tasks timed out (queueing, not quality):** Poisson bursts caused queueing at c=1; shorts were all stuck at the 32 s task-level timeout (11), agent at 300 s (6), longgen at 160 s (1); not a single request in `requests.jsonl` reported an error itself. Among completed Tasks, pass: short 28/28, longctx 20/21, longgen 18/18, agent 14/15.
+- **Re-measurement:** extracted these 18 Tasks into a separate subset (`baseline_8/rerun_workload/timeouts_subset.json`, `unit_gap_s` all set to 1, λ=1/70 i.e. a fixed 70 s interval to guarantee no queueing; sha `8eb6432…`, **not** the frozen workload), `baseline_8/rerun/`, all 18 ok, `requests_processing` max 1, no sleep gap. The result of each Task is "use the first pass if it was ok, otherwise use the re-measurement".
+- **Single-stream quality pass rate (Phase 2's quality baseline):**
+  | Type | Count | pass | Rate |
   |---|---|---|---|
   | short | 39 | 39 | 100.0% |
   | longctx | 21 | 20 | 95.2% |
   | longgen | 19 | 19 | 100.0% |
   | agent | 21 | 20 | 95.2% |
-  失败 2 个:`t0071`(longctx)——模型答了 `6y85e5u8`,**去掉了 `KEY-` 前缀**,按子串检查算失败,内容其实对(「Reply with the code only」容易让模型剥掉前缀;检查口径保持严格子串、对所有条件一致,所以不影响对比,只让绝对值略偏保守;若改成只查 8 位后缀,longctx 会是 100%,但那需要重测基线);`t0098`(agent,5 步)原因没查。
-- **补测的单流耗时:** short 均 2.9 s(11 个)、longgen 14.0 s(1 个)、agent 35.5 s(6 个,步数/delay 不同),与 T_solo(3.19 / 15.95 / 6.2×步数+Σdelay)同量级。
-- **合盖照跑(顺带观察):** 第一遍 Run 中 23:46:53 起合盖(`pmset -g log` 里 `Clamshell Sleep` → DarkWake),计算没有停(无采样缺口),合盖后 short 延迟 2.9 s 对盖前 3.35–3.49 s,没变慢。插电 + `caffeinate -is` 的前提下这台机器合盖可以继续跑;没有设 `pmset disablesleep`。
-- **冻结:** Dev workload 的 `deadline_s = 5 × T_solo`(用 #7 的新表:short 15.95 s、longctx 131.9 s、longgen 79.75 s、agent 5×(6.2×步数+Σdelay))已写入。**`workloads/dev/default_s1.json` sha256 = `4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a`**,与基线 Run 的 `manifest.json:workload_sha256` 一致。之后不得改动;要改 T_solo 或 needle 措辞就要重新生成并重测基线。
-- **与已有观察的出入:** 无矛盾。要补充的两点:① "超时主动断连 ≈0.7 s 释放 slot" 只对 decode 阶段成立,冒烟里 prefill 阶段超时的请求仍占 slot(上面 `requests_processing` 到 3);② Step 5.5 里的 LCP 机制从"源码结论"变成"有一个实测实例"(见上)。
-- **注意:** 单流基线只在 `-np 4 -c 16384 --no-kv-unified -t 8` 下测;换 c / 系列 U 之后的质量要另测。
+  2 failures: `t0071` (longctx) — the model answered `6y85e5u8`, **dropping the `KEY-` prefix**, which counts as a failure under the substring check although the content is actually right ("Reply with the code only" easily makes the model strip the prefix; the check criterion stays a strict substring, consistent across all conditions, so it does not affect comparisons and only makes the absolute value slightly conservative; if changed to check only the 8-character suffix, longctx would be 100%, but that would require re-measuring the baseline); `t0098` (agent, 5 steps) cause not investigated.
+- **Single-stream times of the re-measurement:** short mean 2.9 s (11), longgen 14.0 s (1), agent 35.5 s (6, different steps/delay), the same order of magnitude as T_solo (3.19 / 15.95 / 6.2×steps+Σdelay).
+- **Kept running with the lid closed (incidental observation):** during the first-pass Run the lid was closed from 23:46:53 (`Clamshell Sleep` → DarkWake in `pmset -g log`), computation did not stop (no sampling gap), and after closing the lid the short latency was 2.9 s vs 3.35–3.49 s before, not slower. With AC power + `caffeinate -is`, this machine can keep running with the lid closed; `pmset disablesleep` was not set.
+- **Frozen:** the Dev workload's `deadline_s = 5 × T_solo` (using the new table from #7: short 15.95 s, longctx 131.9 s, longgen 79.75 s, agent 5×(6.2×steps+Σdelay)) has been written. **`workloads/dev/default_s1.json` sha256 = `4eefd673a414c9ff86a6b9d5c440e6dc57851d1477826027604de43017611d2a`**, consistent with `manifest.json:workload_sha256` of the baseline Run. It must not be changed afterwards; changing T_solo or the needle wording requires regenerating and re-measuring the baseline.
+- **Discrepancies with existing observations:** none contradicts. Two points to add: ① "active disconnect on timeout releases the slot in ≈0.7 s" holds only for the decode phase; in the smoke test, requests that timed out during prefill still held the slot (`requests_processing` reached 3 above); ② the LCP mechanism in Step 5.5 went from a "source-code conclusion" to "has one measured instance" (see above).
+- **Note:** the single-stream baseline was measured only under `-np 4 -c 16384 --no-kv-unified -t 8`; quality after changing c / moving to series U must be measured separately.
 
-### 2026-11-01 #9 批跑 E1–E5 结果(45 个正式 Run 全部完成)
-条件:HEAD `d23e96d`(启动时工作区干净)、插电 100%、低电量模式关、`caffeinate -is`、`-t 8`;2026-10-31 11:53 启动,2026-11-01 04:50 结束,共 ≈ 17 h(估算 18.9 h)。原始数据 `results/raw/batch/`(45 个目录,47 MB),汇总 `results/batch/summary.json`,分析 `results/analysis/batch/`。
-- **完成情况:** planned 45 / done 45;`failed_runs`、`blocked_stages`、`retried_runs`、`throttled_runs`、`missing_reused` 全空;`invalid/` 为空——每个 Run 第 1 次尝试就通过校验,整批没有降频(`pmset -g therm` 始终无告警),没有拔电。冷启动 1.25–3.29 s(均值 1.95 s)。30-Task 试跑 5 个(E1-S/E4/E5/E3/E1-U)在正式批跑前全部通过,没有重做。
-- **构成:** E1-S 12(c∈{1,2,4,8},λ=0.088)、E4 新增 6(`cache_prompt=off`,c∈{1,4}),E5 新增 9(c=4,λ∈{0.029,0.059,0.118}),E3 12(c=4,λ=0.088,Tool delay {0,0.5,1,3} s),E1-U 6(np=8 `-kvu`,c∈{4,8});E4 的 on 侧、E5 的 λ=0.088 点复用 E1-S;E2 从 E1 数据按 Step 切,没有单独跑。
-- **最重要的发现:λ=0.9μ 对 c≤4 严重过载,μ ≈ 0.098 高估了。** E1-S 三个 seed 的平均:
+### 2026-11-01 #9 Batch E1–E5 results (all 45 official Runs completed)
+Conditions: HEAD `d23e96d` (working tree clean at start), AC power 100%, low-power mode off, `caffeinate -is`, `-t 8`; started 2026-10-31 11:53, ended 2026-11-01 04:50, ≈ 17 h in total (estimate 18.9 h). Raw data `results/raw/batch/` (45 directories, 47 MB), summary `results/batch/summary.json`, analysis `results/analysis/batch/`.
+- **Completion:** planned 45 / done 45; `failed_runs`, `blocked_stages`, `retried_runs`, `throttled_runs`, `missing_reused` all empty; `invalid/` empty — every Run passed validation on the first attempt, there was no throttling in the whole batch (`pmset -g therm` never showed a warning), and no unplugging. Cold start 1.25–3.29 s (mean 1.95 s). The 5 30-Task pilots (E1-S/E4/E5/E3/E1-U) all passed before the official batch and were not redone.
+- **Composition:** E1-S 12 (c∈{1,2,4,8}, λ=0.088), E4 6 new (`cache_prompt=off`, c∈{1,4}), E5 9 new (c=4, λ∈{0.029,0.059,0.118}), E3 12 (c=4, λ=0.088, Tool delay {0,0.5,1,3} s), E1-U 6 (np=8 `-kvu`, c∈{4,8}); E4's on side and E5's λ=0.088 point reuse E1-S; E2 is sliced by Step from E1 data and was not run separately.
+- **Most important finding: λ=0.9μ is heavily overloaded for c≤4, so μ ≈ 0.098 is an overestimate.** Average of the three seeds of E1-S:
 
-  | c | goodput (task/s) | p99(完成/deadline) | fail 率 |
+  | c | goodput (task/s) | p99 (completion/deadline) | fail rate |
   |---|---|---|---|
   | 1 | 0.0049 | 1.82 | 63.6% |
   | 2 | 0.0063 | 1.90 | 63.6% |
   | 4 | 0.0149 | 1.91 | 58.8% |
   | 8 | 0.0520 | 1.40 | 29.6% |
 
-  失败几乎全是任务级超时(`timeout_rate` ≈ `fail_rate`)。E5 在 c=4 上扫 λ:0.029 → fail 3.4%、p50 25 s;0.059 → 51.5%;0.088 → 58.8%;0.118 → 82.1%。所以 c=4 的真实饱和点在 **0.3μ 与 0.6μ 之间**(≈ 0.03–0.05 task/s),不是 0.098。根因与 10-31 试跑时的判断一致:P_eff(4)=1.5 是插电前的估计,一直没在插电后重测;不是 runner 或 server 的 bug(`requests_processing` 最大值 ≤ c,无校验失败)。λ 网格已冻结,没有改。
-- **Fixed-concurrency baseline c(按 `src/batch/baseline.py` 的规则):c = 8,但 `p99_acceptable = False`。** 四个 c 都没有满足「p99(完成/deadline) ≤ 1 且 fail ≤ 5%」,规则回退到 goodput 最大的 c=8。**这个 c=8 是过载区间里的相对最优,不是在可接受 p99 下选出来的,Phase 2 用它做 baseline 前需要先决定怎么处理**(选项:在 0.3–0.6μ 之间补测 E1;或明确接受这个回退结果)。`baseline_c.json` 的 `complete=true`(4 个 c × 3 seed 齐全)。
-- **E4(`cache_prompt` on − off,同 seed 配对,3 对):** c=1:p50 −27.3 s(std 14.3)、goodput +0.0027、fail −9.6 个百分点;c=4:p50 −35.9 s(std 51.2)、goodput +0.0105、fail −18.6 个百分点。方向一致(开缓存更好),但两个配置都在过载区间,fail 率差里有排队放大效应,std 很大,只能说方向,不能当作精确效应量。
-- **E3(c=4,λ=0.088,Tool delay 0/0.5/1/3 s):** fail 59–63%,p50 103–114 s,没有可辨的趋势,Tool delay 的影响淹没在过载里。原因同上,不是数据坏了。
-- **E1-U(np=8 `-kvu`,共享池):** c=4 fail 65%、c=8 fail 76%,**比 E1-S 的 c=8(30%)差**。c=8 的 queue_time 只有 17.6 s(S 系列 c=8 为 0.45 s),说明共享池下并发请求争抢 16384 token 的池,而不是排队;没有 pool-exhaustion 错误。
-- **内存(`footprint_mb` 峰值):** S 系列所有 c 都约 3.84–3.87 GB(c=1/2/4/8 差 <1%),U 系列约 3.90 GB——总 KV 预算固定时,峰值内存基本由 B 决定,与 c 无关,和 ADR 0002/0004 的预期一致;RSS 峰值 5.5–5.8 GB。
-- **运行中的问题与修复:**
-  1. 批跑末尾的汇总分析崩溃(`TypeError`):`with_line_label` 拼图例名时遇到缺失的 `tool_delay_s`(只有 E3 的 Run 有这个键)。已修(`src/analysis/report.py`)并加了回归测试,重跑后 `results/analysis/batch/` 完整生成。数据本身不受影响。
-  2. 全量 pytest 曾有一次在 `test_runner.py::test_failures_are_classified_and_never_drop_a_task` 挂起 16 分钟以上,没能复现(单文件 12.8 s 通过,全量 138 个在 76 s 内通过);按偶发 flake 记录。
-- **没做的:** E4 的「共享 / 不共享 system prompt」变体;E1-U 的 c∈{1,2}(规划里只跑了 {4,8})。
-- **背景干扰:** 机器上有 XProtect 偶发占 CPU,我无法排除,也无法在数据里单独识别;同配置三个 seed 之间没有看到明显离群的 Run,但没有做过系统的离群检验。
+  Failures are almost all task-level timeouts (`timeout_rate` ≈ `fail_rate`). E5 sweeps λ at c=4: 0.029 → fail 3.4%, p50 25 s; 0.059 → 51.5%; 0.088 → 58.8%; 0.118 → 82.1%. So the true saturation point of c=4 is **between 0.3μ and 0.6μ** (≈ 0.03–0.05 task/s), not 0.098. The root cause is consistent with the judgment at the 10-31 pilot: P_eff(4)=1.5 was an estimate from before plugging in and was never re-measured on AC power; it is not a bug in the runner or server (`requests_processing` max ≤ c, no validation failure). The λ grid is frozen and was not changed.
+- **Fixed-concurrency baseline c (by the rule in `src/batch/baseline.py`): c = 8, but `p99_acceptable = False`.** None of the four c satisfy "p99(completion/deadline) ≤ 1 and fail ≤ 5%", and the rule falls back to the c with the largest goodput, c=8. **This c=8 is the relative optimum within the overload region, not selected under an acceptable p99; before Phase 2 uses it as the baseline, a decision on how to handle it is needed** (options: measure E1 additionally between 0.3–0.6μ; or explicitly accept this fallback result). `complete=true` in `baseline_c.json` (4 c × 3 seeds all present).
+- **E4 (`cache_prompt` on − off, paired by seed, 3 pairs):** c=1: p50 −27.3 s (std 14.3), goodput +0.0027, fail −9.6 percentage points; c=4: p50 −35.9 s (std 51.2), goodput +0.0105, fail −18.6 percentage points. The direction is consistent (cache on is better), but both configurations are in the overload region, the fail-rate difference contains queueing amplification and the std is large, so it shows only the direction and cannot be taken as a precise effect size.
+- **E3 (c=4, λ=0.088, Tool delay 0/0.5/1/3 s):** fail 59–63%, p50 103–114 s, no discernible trend; the effect of Tool delay is drowned in overload. The cause is the same as above, not corrupted data.
+- **E1-U (np=8 `-kvu`, shared pool):** c=4 fail 65%, c=8 fail 76%, **worse than E1-S c=8 (30%)**. The queue_time of c=8 is only 17.6 s (0.45 s for series S c=8), which indicates that under the shared pool concurrent requests contend for the 16384-token pool rather than queue; there were no pool-exhaustion errors.
+- **Memory (`footprint_mb` peak):** for series S all c are about 3.84–3.87 GB (c=1/2/4/8 differ by <1%), series U about 3.90 GB — with the total KV budget fixed, peak memory is basically determined by B and independent of c, in line with the expectations of ADR 0002/0004; RSS peak 5.5–5.8 GB.
+- **Problems during the run and fixes:**
+  1. The summary analysis at the end of the batch crashed (`TypeError`): `with_line_label` ran into a missing `tool_delay_s` when assembling legend names (only E3 Runs have this key). Fixed (`src/analysis/report.py`) with a regression test added, and after rerunning `results/analysis/batch/` was generated completely. The data itself is unaffected.
+  2. The full pytest once hung for more than 16 minutes at `test_runner.py::test_failures_are_classified_and_never_drop_a_task` and could not be reproduced (the single file passed in 12.8 s, and all 138 passed in 76 s); recorded as an occasional flake.
+- **Not done:** the "shared / not shared system prompt" variant of E4; c∈{1,2} of E1-U (only {4,8} were run in the plan).
+- **Background interference:** XProtect occasionally used CPU on the machine, which I cannot rule out and cannot identify separately in the data; among the three seeds of the same configuration no obviously outlying Run was seen, but no systematic outlier test was done.
 
-### 2026-11-01 #9 更正:E1-S 的 c=8 是靠"拒掉 longctx"才显得最好,baseline c=8 不能直接用
-上一条里「c=8 是过载区间里的相对最优」的说法不完整,按 `tasks.jsonl` 的 status 逐类统计(E1-S,稳态 Task,3 个 seed 合计)后更正如下:
-| c | 每个 slot 容量 | longctx | agent | longgen | short |
+### 2026-11-01 #9 Correction: E1-S c=8 looks best only by "rejecting longctx", so baseline c=8 cannot be used directly
+The statement in the previous entry that "c=8 is the relative optimum within the overload region" was incomplete; after counting by type from the status in `tasks.jsonl` (E1-S, steady-state Tasks, 3 seeds combined), it is corrected as follows:
+| c | capacity per slot | longctx | agent | longgen | short |
 |---|---|---|---|---|---|
 | 1 | 16384 | 62 ok | 9 ok / 44 timeout | 27 ok / 33 timeout | 8 ok / 108 timeout |
 | 2 | 8192 | 62 ok | 12 / 41 | 23 / 37 | 9 / 107 |
 | 4 | 4096 | 62 ok | 17 / 36 | 19 / 41 | 22 / 94 |
 | 8 | **2048** | **0 ok / 62 `error_ctx_exceeded`** | 42 ok / 11 `error_ctx_exceeded` | 52 / 8 timeout | 111 / 5 timeout |
-- **c=8 的 slot 只有 2048 token,longctx 全部、agent 的 11 个直接 `error_ctx_exceeded`**(秒级失败,不占 slot 也不排队)。最重的负载(longctx,T_solo 26.4 s,占 20% 的 Task)被整个拒掉,剩下的 short/longgen 才不超时。所以 c=8 的 goodput 0.052 和 fail 29.6% 不是"并发 8 更快",而是"并发 8 把一类 Task 拒了"。`baseline_c.json` 里 c=8 的 `p99_deadline_ratio=1.40` 也只统计了 ok 的 Task,看不出这一点。
-- **c=1/2/4 的失败主要是 short 超时(short 的任务级超时只有 32 s):** longctx 全 ok,但每个占 slot 26 s 左右,FIFO 下后面的 short 排队超过 32 s 就超时。同一 λ 下 c 越大 short 超时越少(108 → 107 → 94 个),但改善很小。
-- **c=1 在 λ=0.088 下按算术就过载,不是意外:** 平均服务时间 S̄ ≈ 15.3 s → 单流容量 ≈ 1/15.3 = 0.065 task/s < 0.088。c=2、c=4 的容量取决于 P_eff(未在插电后重测),E5 说明 c=4 在 λ ≈ 0.03–0.05 之间饱和。
-- **对 baseline 的含义:** 现行规则(`src/batch/baseline.py`)只算 ok Task 的 p99,并且在没有任何 c 可接受时回退到 goodput 最大者,这会把"拒掉 longctx 的 c=8"选出来。**这个 c=8 不应该当作 Fixed-concurrency baseline。** 在下面的问题解决前,baseline c 视为**未定**:① 在 λ ≈ 0.03–0.05 补测 E1(c=1/2/4 才有可能满足 p99 与 fail 率);② 规则里把 `error_ctx_exceeded` 单独当成不可接受(任何 c 只要有 ctx_exceeded 就不合格)。
-- **E1-U 与 E1-S c=8 的对比同样作废:** 上一条里「E1-U 比 E1-S c=8 差」是拿一个没有 longctx 的 c=8 比,不成立。E1-U(共享池)没有 2048 的单 slot 上限,longctx 会正常跑,应该和 E1-S 的 c=4(同样跑 longctx)比较:U c=4 fail 65% 对 S c=4 58.8%,U c=8 fail 76%。
+- **A slot at c=8 has only 2048 tokens, so all longctx and 11 agents directly hit `error_ctx_exceeded`** (failing within seconds, neither holding a slot nor queueing). The heaviest load (longctx, T_solo 26.4 s, 20% of Tasks) was rejected wholesale, and only then did the remaining short/longgen not time out. So the goodput of 0.052 and fail 29.6% at c=8 are not "concurrency 8 is faster" but "concurrency 8 rejected a class of Tasks". The `p99_deadline_ratio=1.40` of c=8 in `baseline_c.json` also counts only ok Tasks, so this cannot be seen.
+- **Failures at c=1/2/4 are mainly short timeouts (the task-level timeout of short is only 32 s):** longctx is all ok, but each occupies a slot for about 26 s, and under FIFO the shorts queued behind time out once they wait more than 32 s. At the same λ, the larger c is, the fewer short timeouts (108 → 107 → 94), but the improvement is small.
+- **c=1 is overloaded at λ=0.088 by arithmetic, not by accident:** mean service time S̄ ≈ 15.3 s → single-stream capacity ≈ 1/15.3 = 0.065 task/s < 0.088. The capacity of c=2 and c=4 depends on P_eff (not re-measured on AC power), and E5 shows c=4 saturates at λ between 0.03–0.05.
+- **Implication for the baseline:** the current rule (`src/batch/baseline.py`) counts the p99 of only ok Tasks, and falls back to the largest goodput when no c is acceptable, which selects "c=8 that rejects longctx". **This c=8 should not be used as the Fixed-concurrency baseline.** Until the problems below are solved, the baseline c is regarded as **undetermined**: ① measure E1 additionally at λ ≈ 0.03–0.05 (only c=1/2/4 could satisfy the p99 and fail rate); ② in the rule, treat `error_ctx_exceeded` as unacceptable on its own (any c with ctx_exceeded is disqualified).
+- **The comparison of E1-U with E1-S c=8 is likewise void:** the claim in the previous entry that "E1-U is worse than E1-S c=8" compared against a c=8 with no longctx and does not hold. E1-U (shared pool) has no single-slot cap of 2048 and longctx runs normally, so it should be compared with E1-S c=4 (which also runs longctx): U c=4 fail 65% vs S c=4 58.8%, U c=8 fail 76%.
 
-### 2026-11-01 #9 基线规则放宽(事后调整)并重算 baseline c
-**这是看过 E1–E5 数据之后改的规则,不是事先定的;报告里必须这样写。** 原规则(p99/deadline ≤ 1 且失败率 ≤ 5%)在现有数据上有两个问题:① 100 个 Task 的 p99 基本等于最慢的一两个,连不过载的 c=4、λ=0.029 也是 1.72 / 1.91 / 1.84(完成的 Task 里有 7–13 个超 deadline);② 没有 c 合格时回退到 goodput 最高者,选出了靠拒掉 longctx 的 c=8。
-- **新规则(`rule="relaxed"`,`src/batch/baseline.py`):** 任何出现 `error_ctx_exceeded` 的 c 不合格,回退时也不能选;其余只要求失败率均值 ≤ 10%;p99/deadline 只记录,不再是门槛。比较量、5% 并列取较小 c 不变。原规则保留为 `rule="strict"`,结果写进 `baseline_c.json` 的 `strict_rule_result`。
-- **重算(`scripts/recompute_baseline.py`,E1-S λ=0.088,12 个 Run,不重跑):** c=1 / 2 / 4 / 8 的 goodput 0.0049 / 0.0063 / 0.0149 / 0.0520,失败率 63.6% / 63.6% / 58.8% / 29.6%;c=8 的 `ctx_exceeded_rate` = 25.1%,被排除。**baseline c = 4,但 `acceptable=False`**:λ=0.088 下所有 c 都过载,c=4 是"没有拒绝任务的 c 里 goodput 最高"的回退选择。原规则仍给出 c=8。
-- **补充证据(不参与选择):** c=4、λ=0.029(E5)3 个 Run 在新规则下合格(失败率 3.4%,goodput 0.0253)。**c=1、2 没有在这个 λ 上测过**,所以不能说 c=4 是 λ=0.029 下的最优,只能说它合格。
-- **仍未解决:** 想在不过载的 λ 上正式比较 c=1/2/4,需要补测 E1(λ≈0.045,c∈{1,2,4},3 seed,≈6–7 h)。
-- 测试:`tests/test_batch_baseline.py` 旧用例改为 `rule="strict"`,新增 3 个 relaxed 用例;全量通过。
+### 2026-11-01 #9 Baseline rule relaxed (post-hoc adjustment) and baseline c recomputed
+**This rule was changed after looking at the E1–E5 data, not decided in advance; the report must say so.** The original rule (p99/deadline ≤ 1 and failure rate ≤ 5%) has two problems on the existing data: ① the p99 of 100 Tasks is basically the slowest one or two, and even c=4, λ=0.029 which is not overloaded gives 1.72 / 1.91 / 1.84 (7–13 of the completed Tasks exceeded the deadline); ② when no c qualifies, it falls back to the highest goodput, selecting c=8 which rejects longctx.
+- **New rule (`rule="relaxed"`, `src/batch/baseline.py`):** any c with `error_ctx_exceeded` is disqualified and cannot be chosen in the fallback either; otherwise only the mean failure rate ≤ 10% is required; p99/deadline is only recorded and is no longer a threshold. The compared quantity and the rule that 5% ties go to the smaller c are unchanged. The original rule is kept as `rule="strict"`, and its result is written to `strict_rule_result` in `baseline_c.json`.
+- **Recomputation (`scripts/recompute_baseline.py`, E1-S λ=0.088, 12 Runs, no rerun):** goodput of c=1 / 2 / 4 / 8 is 0.0049 / 0.0063 / 0.0149 / 0.0520, failure rate 63.6% / 63.6% / 58.8% / 29.6%; the `ctx_exceeded_rate` of c=8 = 25.1%, so it is excluded. **baseline c = 4, but `acceptable=False`**: all c are overloaded at λ=0.088, and c=4 is the fallback choice "highest goodput among the c that do not reject tasks". The original rule still gives c=8.
+- **Supplementary evidence (not part of the selection):** the 3 Runs of c=4, λ=0.029 (E5) qualify under the new rule (failure rate 3.4%, goodput 0.0253). **c=1 and 2 were not measured at this λ**, so we cannot say c=4 is optimal at λ=0.029, only that it qualifies.
+- **Still unresolved:** to formally compare c=1/2/4 at a non-overloaded λ, E1 needs to be measured additionally (λ≈0.045, c∈{1,2,4}, 3 seeds, ≈6–7 h).
+- Tests: the old cases in `tests/test_batch_baseline.py` were changed to `rule="strict"`, and 3 relaxed cases were added; the full suite passes.

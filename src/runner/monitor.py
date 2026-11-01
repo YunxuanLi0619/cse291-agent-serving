@@ -1,7 +1,7 @@
-"""系统采样器:独立线程每 0.5 s 采一次内存、/metrics、/slots 和 live_tokens,写 system.jsonl。
+"""System sampler: a separate thread samples memory, /metrics, /slots and live_tokens every 0.5 s and writes system.jsonl.
 
-内存读取是可替换的 MemoryProbe(ADR 0004):macOS 用 `footprint`(主)+ RSS(次),Linux 留作接口位置。
-某一路采样失败不跳过这一行:失败的字段为 null,原因写进 `error`。
+Memory reading is a replaceable MemoryProbe (ADR 0004): macOS uses `footprint` (primary) + RSS (secondary), and Linux is left as an interface placeholder.
+If one sampling source fails the row is not skipped: the failed field is null and the reason is written to `error`.
 """
 import re
 import subprocess
@@ -15,7 +15,7 @@ import httpx
 
 from .logs import JsonlWriter
 
-MIN_INTERVAL_S = 0.5  # footprint 单次约 0.2–0.5 s,间隔不能更短(ADR 0004)
+MIN_INTERVAL_S = 0.5  # a single footprint call takes about 0.2–0.5 s, so the interval cannot be shorter (ADR 0004)
 HTTP_TIMEOUT_S = 2.0
 PROBE_TIMEOUT_S = 5.0
 _UNIT_MB = {"KB": 1 / 1024, "MB": 1.0, "GB": 1024.0}
@@ -24,15 +24,15 @@ _FOOTPRINT_RE = re.compile(r"Footprint:\s+([\d.]+)\s*(KB|MB|GB)")
 
 @dataclass
 class MemReading:
-    footprint_mb: float  # 主口径
-    rss_mb: float  # 次口径
+    footprint_mb: float  # primary measure
+    rss_mb: float  # secondary measure
 
 
 class MemoryProbe(Protocol):
-    platform: str  # 平台标签,随每行数据记录;不同平台的数据不混画一张图
+    platform: str  # platform label, recorded with every row; data from different platforms is not plotted on one figure
 
     def read(self, pid: int) -> MemReading:
-        """读失败抛异常,由采样器记进 error 字段。"""
+        """Raise an exception on read failure; the sampler records it in the error field."""
         ...
 
 
@@ -53,7 +53,7 @@ class MacOSProbe:
 
 
 class LinuxProbe:
-    """接口位置:读 /proc/<pid>/status。当前只在 macOS 上实验,尚未实现。"""
+    """Interface placeholder: read /proc/<pid>/status. Currently only experimented on macOS; not implemented yet."""
     platform = "linux"
 
     def read(self, pid: int) -> MemReading:
@@ -126,11 +126,11 @@ class SystemSampler:
         while not self._stop.is_set():
             try:
                 self.tick()
-            except Exception as e:  # 比如日志写盘失败:报到 stderr,线程不能静默死掉
+            except Exception as e:  # e.g. log write to disk failed: report to stderr; the thread must not die silently
                 print(f"system sampler: tick failed: {type(e).__name__}: {e}", file=sys.stderr)
             next_at += self._interval_s
             delay = next_at - (time.monotonic() - t0)
-            if delay < 0:  # 一次采样超过间隔:追上当前时刻,不连发补采
+            if delay < 0:  # one sample exceeded the interval: catch up to the current time instead of firing make-up samples back to back
                 next_at, delay = time.monotonic() - t0, 0.0
             if self._stop.wait(delay):
                 break

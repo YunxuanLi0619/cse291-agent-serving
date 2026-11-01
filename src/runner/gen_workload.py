@@ -1,6 +1,6 @@
-"""Workload 生成器:固定种子 → 纯数据 JSON 文件,同种子字节一致。
+"""Workload generator: fixed seed → pure-data JSON file, byte-identical for the same seed.
 
-用法: python -m src.runner.gen_workload --mix configs/mix_dev.json --t-solo configs/t_solo.json \
+Usage: python -m src.runner.gen_workload --mix configs/mix_dev.json --t-solo configs/t_solo.json \
         --seed 1 --n-tasks 100 --out workloads/dev/default_s1.json --base-url http://127.0.0.1:8080
 """
 import argparse
@@ -12,13 +12,13 @@ from pathlib import Path
 WORDS = ("alpha river stone market window garden copper signal harbor violet engine paper "
          "lantern meadow thunder basket orbit canyon ribbon falcon marble velvet anchor cobalt "
          "saddle timber quartz meteor candle summit pebble tunnel harvest compass glacier").split()
-# 措辞是 #8 冒烟后改的:Llama-3.2-3B 对 "secret key" 常拒答("I can't provide ... illegal or harmful"),
-# 改成 "reference code" 后同一批 prompt 全部答对
+# The wording was changed after the #8 smoke run: Llama-3.2-3B often refused "secret key" ("I can't provide ... illegal or harmful"),
+# and after changing it to "reference code" the same batch of prompts was all answered correctly
 RECALL_QUESTION = ("What is the reference code mentioned at the beginning of this conversation? "
                    "Reply with the code only.")
 TOLERANCE = 0.05
 TOOL_RESULT_TOKENS = 150
-# 每个 Task type 的第 1 步 prompt_tokens 目标(含 chat template)与每步输出上限
+# Target prompt_tokens for step 1 of each Task type (including the chat template) and the per-step output cap
 TYPE_SPECS = {
     "short": {"prompt_tokens": 256, "max_tokens": 64},
     "longctx": {"prompt_tokens": 3000, "max_tokens": 64},
@@ -28,12 +28,12 @@ TYPE_SPECS = {
 
 
 def _task_rng(seed: int, index: int, purpose: str) -> random.Random:
-    # 每个 Task 的每个用途一条独立随机流:Task 内容不依赖 tokenizer 调用了多少次
+    # One independent random stream per purpose per Task: Task content does not depend on how many times the tokenizer was called
     return random.Random(f"{seed}:{index}:{purpose}")
 
 
 class _WordStream:
-    """同一条随机流上按需增长的词表;words(n) 总是同一序列的前缀。"""
+    """A vocabulary that grows on demand along one random stream; words(n) is always a prefix of the same sequence."""
 
     def __init__(self, rng: random.Random):
         self._rng = rng
@@ -46,13 +46,13 @@ class _WordStream:
 
 
 def _fit(count_fn, target: int) -> int:
-    """返回使 count_fn(n) ≤ target 的最大 n(count_fn 随 n 单调不减),并自检落在 ±5% 内。"""
+    """Return the largest n such that count_fn(n) ≤ target (count_fn is non-decreasing in n), and self-check that it falls within ±5%."""
     hi = 1
     while count_fn(hi) <= target:
         hi *= 2
         if hi > 1_000_000:
             raise ValueError(f"cannot reach {target} tokens")
-    lo = 0  # count_fn(lo) ≤ target 或 lo=0;count_fn(hi) > target
+        lo = 0  # count_fn(lo) ≤ target or lo=0; count_fn(hi) > target
     while hi - lo > 1:
         mid = (lo + hi) // 2
         lo, hi = (mid, hi) if count_fn(mid) <= target else (lo, mid)
@@ -101,7 +101,7 @@ def _make_task(t_solo: dict, seed: int, index: int, type_: str, gap: float, toke
     first, measured = _first_prompt(tokenizer, ws, needle, shape.uniform(0.2, 0.8), suffix, spec["prompt_tokens"])
     contents = [first]
     for k in range(1, n_steps):
-        text = _tool_result(tokenizer, _task_rng(seed, index, f"tool{k}"))  # 每步独立随机流
+        text = _tool_result(tokenizer, _task_rng(seed, index, f"tool{k}"))  # independent random stream per step
         contents.append(text + "\n\n" + RECALL_QUESTION if k == n_steps - 1 else text)
     if type_ == "agent":
         deadline = 5 * (t_solo["agent_per_step_s"] * n_steps + sum(delays))
@@ -134,9 +134,9 @@ def generate_workload(mix_cfg: dict, t_solo: dict, seed: int, n_tasks: int, toke
 
 
 def with_fixed_tool_delay(workload: dict, delay_s: float) -> dict:
-    """E3 变体:所有 Tool delay 取同一个值,agent 的 deadline 按 Workload 自带的 T_solo 表和新 delay 重算。
+    """E3 variant: all Tool delays take the same value, and the agent deadline is recomputed from the Workload's own T_solo table and the new delay.
 
-    其余内容(prompt、Needle、到达间隔)不变,所以同 seed 的不同 delay 之间可以配对。
+    The rest (prompt, Needle, inter-arrival times) is unchanged, so different delays of the same seed can be paired.
     """
     t_solo = workload["t_solo"]
     tasks = []
@@ -161,7 +161,7 @@ def main(argv: list[str] | None = None, tokenizer=None) -> Path:
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--n-tasks", type=int, required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--base-url", default="http://127.0.0.1:8080", help="用于 token 校准的 llama-server")
+    ap.add_argument("--base-url", default="http://127.0.0.1:8080", help="llama-server used for token calibration")
     a = ap.parse_args(argv)
     if tokenizer is None:
         from .tokenizer import LlamaServerTokenizer

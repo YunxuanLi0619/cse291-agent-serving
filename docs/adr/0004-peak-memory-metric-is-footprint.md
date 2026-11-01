@@ -1,9 +1,9 @@
-# 峰值内存主口径用 macOS `footprint`,RSS 仅作次口径
+# Peak memory uses macOS `footprint` as the primary measure, with RSS only as a secondary measure
 
-在 macOS 上,压缩内存不计入 RSS:同一配置不同次启动的空闲 RSS 为 689 / 4678 / 3577 MB,负载下 RSS 在 592 → 2536 → 170 MB 间剧烈起伏,不能代表占用。`footprint`(物理占用)在同样条件下稳定。因此峰值内存 = 采样期间 `footprint` 的最大值;RSS 同时记录,但在报告里标注不可靠的原因。
+On macOS, compressed memory is not counted in RSS: the idle RSS of the same configuration over different launches is 689 / 4678 / 3577 MB, and under load RSS fluctuates wildly between 592 → 2536 → 170 MB, so it cannot represent usage. `footprint` (physical usage) is stable under the same conditions. Therefore peak memory = the maximum `footprint` during sampling; RSS is recorded as well, but the report notes why it is unreliable.
 
-`footprint` 口径是下界:默认 mmap 时约 300 MiB 权重是文件映射、不计入;`-lm none` 的 footprint 高约 294 MB(4083 vs 3789 MB)。主实验用默认 mmap,报告里同时给出两个数。`footprint` 单次采样约 0.2–0.5 s,采样间隔不低于 0.5 s。
+The `footprint` measure is a lower bound: with the default mmap, about 300 MiB of weights are file-mapped and not counted; `-lm none` raises footprint by about 294 MB (4083 vs 3789 MB). The main experiments use the default mmap, and the report gives both numbers. A single `footprint` sample takes about 0.2–0.5 s, so the sampling interval is no less than 0.5 s.
 
 ## Consequences
 
-- 这条只适用于 macOS。监控把"读取进程内存"做成可替换的接口(macOS:`footprint`;Linux:`/proc/<pid>/status`),`manifest.json` 和数据带平台标签,不同平台的数据不混画一张图。
+- This applies only to macOS. Monitoring makes "read process memory" a replaceable interface (macOS: `footprint`; Linux: `/proc/<pid>/status`), `manifest.json` and the data carry a platform label, and data from different platforms is not plotted on one figure.

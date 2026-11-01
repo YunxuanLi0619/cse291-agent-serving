@@ -1,4 +1,4 @@
-"""分析命令的测试:手写 JSONL 夹具进、CSV/图出;期望值都是手算的。"""
+"""Tests of the analysis command: hand-written JSONL fixtures in, CSVs/plots out; the expected values are hand-computed."""
 import csv
 import json
 
@@ -41,12 +41,12 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
-# 手算夹具:前 3 个 warmup(故意很慢/失败,若被计入会改变结果),后 7 个稳态。
-#   稳态窗口 = 最早到达 10 ~ 最晚完成 40 = 30 s;N = 7
-#   ok 的完成时间 [4,6,8,12,10] → 排序 [4,6,8,10,12]:p50 = 8,p99 = 10 + 0.96 × 2 = 11.92
-#   吞吐 = 5 ok / 30;失败率 = 2/7(timeout + ctx_exceeded);timeout 率 = 1/7
-#   goodput:deadline 10 内且 quality pass 的只有 3 个(完成 12 超期;T8 没 pass)→ 3/30 = 0.1
-#   排队时间(含失败 Task)[.5,1,2,3,1.5,20,0]:均值 28/7 = 4.0;p99 = 3 + 0.94 × 17 = 18.98
+# Hand-computed fixture: the first 3 are warmup (deliberately very slow/failing; they would change the result if counted), the last 7 are steady state.
+#   steady-state window = earliest arrival 10 ~ latest completion 40 = 30 s; N = 7
+#   completion times of ok Tasks [4,6,8,12,10] → sorted [4,6,8,10,12]: p50 = 8, p99 = 10 + 0.96 × 2 = 11.92
+#   throughput = 5 ok / 30; failure rate = 2/7 (timeout + ctx_exceeded); timeout rate = 1/7
+#   goodput: only 3 are within deadline 10 and quality pass (completion 12 is late; T8 did not pass) → 3/30 = 0.1
+#   queue time (including failed Tasks) [.5,1,2,3,1.5,20,0]: mean 28/7 = 4.0; p99 = 3 + 0.94 × 17 = 18.98
 FIXTURE = [
     task("w1", t_arrive=0, t_done=100, queue=50.0, warmup=True),
     task("w2", t_arrive=1, t_done=90, status="timeout", warmup=True),
@@ -87,7 +87,7 @@ def test_run_metrics_match_hand_computed_values_and_exclude_warmup(raw, out):
 
 
 def simple_run(raw, name, *, c=1, seed=1, x=4.0, **kw):
-    """3 个 warmup + 2 个稳态 ok Task(完成时间都是 x):p50 = x,窗口 = x + 1,吞吐 = 2 / (x + 1)。"""
+    """3 warmup + 2 steady-state ok Tasks (completion time is x for both): p50 = x, window = x + 1, throughput = 2 / (x + 1)."""
     tasks = [task(f"w{i}", t_arrive=i, t_done=i + 99, warmup=True) for i in range(3)]
     tasks += [task("a", t_arrive=10, t_done=10 + x), task("b", t_arrive=11, t_done=11 + x)]
     return make_run(raw, name, tasks, c=c, seed=seed, **kw)
@@ -118,7 +118,7 @@ def test_repeats_are_aggregated_over_seeds_per_config_with_mean_and_std(raw, out
     assert set(rows) == {"1", "4"}
     assert rows["1"]["n_seeds"] == "3"
     assert float(rows["1"]["p50_s_mean"]) == pytest.approx(6.0)
-    assert float(rows["1"]["p50_s_std"]) == pytest.approx(2.0)  # 样本标准差 (4,6,8)
+    assert float(rows["1"]["p50_s_std"]) == pytest.approx(2.0)  # sample standard deviation of (4,6,8)
     assert float(rows["1"]["throughput_per_s_mean"]) == pytest.approx((2 / 5 + 2 / 7 + 2 / 9) / 3)
     assert float(rows["4"]["p50_s_std"]) == pytest.approx(0.0)
     assert (out / "perf_by_c_macos.png").stat().st_size > 0
@@ -139,7 +139,7 @@ def test_other_factors_split_into_separate_lines_not_mixed(raw, out):
             simple_run(raw, f"c{c}_l{lam}", c=c, lam=lam, x=4.0 * lam)
     main(["--raw", str(raw), "--out", str(out)])
     rows = read_csv(out / "perf_by_c_macos.csv")
-    assert len(rows) == 4  # (c, λ) 各一行,不会被平均到一起
+    assert len(rows) == 4  # one row per (c, λ), not averaged together
     assert len({r["line"] for r in rows}) == 2
     assert (out / "perf_by_lambda_macos.csv").exists()
 
@@ -157,7 +157,7 @@ def test_data_from_different_platforms_is_never_in_the_same_csv_or_figure(raw, o
 
 
 def test_cache_prompt_and_tool_delay_split_lines_and_cache_prompt_is_compared_per_seed(raw, out):
-    off, on = {1: 6.0, 2: 10.0}, {1: 4.0, 2: 5.0, 3: 99.0}  # seed 3 只有 on 一侧,不能配对
+    off, on = {1: 6.0, 2: 10.0}, {1: 4.0, 2: 5.0, 3: 99.0}  # seed 3 exists only on the on side and cannot be paired
     for seed, x in off.items():
         simple_run(raw, f"off{seed}", c=1, seed=seed, x=x, cache_prompt=False, tool_delay_s=1.0)
         simple_run(raw, f"off4_{seed}", c=4, seed=seed, x=x, cache_prompt=False, tool_delay_s=1.0)
@@ -169,7 +169,7 @@ def test_cache_prompt_and_tool_delay_split_lines_and_cache_prompt_is_compared_pe
     assert {r["cache_prompt"] for r in read_csv(out / "perf_by_c_macos.csv")} == {"True", "False"}
     assert {r["tool_delay_s"] for r in read_csv(out / "perf_by_tool_delay_s_macos.csv")} == {"1.0", "3.0"}
 
-    # 同 seed 内 on − off:seed1 4−6 = −2,seed2 5−10 = −5 → 均值 −3.5,样本标准差 √4.5
+    # within each seed on − off: seed1 4−6 = −2, seed2 5−10 = −5 → mean −3.5, sample standard deviation √4.5
     (row,) = [r for r in read_csv(out / "paired_cache_prompt_macos.csv")
               if r["c"] == "1" and r["tool_delay_s"] == "1.0"]
     assert row["n_pairs"] == "2"
@@ -179,7 +179,7 @@ def test_cache_prompt_and_tool_delay_split_lines_and_cache_prompt_is_compared_pe
 
 
 def test_runs_with_and_without_a_tool_delay_in_one_batch_still_get_a_figure(raw, out):
-    # 批跑里只有 E3 的 Run 在 manifest 里带 tool_delay_s,其余没有:缺失值也要能当图例名
+    # in the batch only E3 Runs carry tool_delay_s in the manifest, the rest do not: a missing value must still work as a legend name
     for c in (1, 4):
         simple_run(raw, f"plain{c}", c=c)
         simple_run(raw, f"delay{c}", c=c, tool_delay_s=3.0)
@@ -200,8 +200,8 @@ def test_agent_requests_are_sliced_by_step_index_k(raw, out):
              task("a2", type="agent", t_arrive=20, t_done=30, status="timeout", n_steps=2),
              task("s1", type="short", t_arrive=12, t_done=40)]
     requests = [
-        req("a0", 1, submit=0, start=0, first=90, end=99, prompt=9999, cached=0, warmup=True),  # warmup 不计
-        req("s1", 1, submit=12, start=12, first=50, end=60, prompt=9999, cached=0),  # 非 agent 不计
+        req("a0", 1, submit=0, start=0, first=90, end=99, prompt=9999, cached=0, warmup=True),  # warmup not counted
+        req("s1", 1, submit=12, start=12, first=50, end=60, prompt=9999, cached=0),  # non-agent not counted
         req("a1", 1, submit=10, start=10.5, first=11.0, end=12, prompt=1000, cached=0),
         req("a1", 2, submit=14, start=14.0, first=14.2, end=15, prompt=1100, cached=1000),
         req("a2", 1, submit=20, start=21, first=21.5, end=23, prompt=1000, cached=0),
@@ -211,7 +211,7 @@ def test_agent_requests_are_sliced_by_step_index_k(raw, out):
     main(["--raw", str(raw), "--out", str(out)])
     rows = {r["k"]: r for r in read_csv(out / "step_slice_macos.csv")}
     assert set(rows) == {"1", "2"}
-    # k=1:两个 ok Request;TTFT (0.5, 0.5),延迟 (1.5, 2.0),排队 (0.5, 1.0),无前缀复用
+    # k=1: two ok Requests; TTFT (0.5, 0.5), latency (1.5, 2.0), queueing (0.5, 1.0), no prefix reuse
     assert rows["1"]["n_requests_mean"] == "2.0"
     assert float(rows["1"]["ttft_s_mean"]) == pytest.approx(0.5)
     assert float(rows["1"]["latency_s_mean"]) == pytest.approx(1.75)
@@ -219,7 +219,7 @@ def test_agent_requests_are_sliced_by_step_index_k(raw, out):
     assert float(rows["1"]["prompt_tokens_mean"]) == pytest.approx(1000)
     assert float(rows["1"]["reuse_ratio_mean"]) == pytest.approx(0.0)
     assert float(rows["1"]["fail_share_mean"]) == pytest.approx(0.0)
-    # k=2:一个 ok、一个 timeout:失败占 1/2;时延类指标只看 ok;复用 = 1000/1100
+    # k=2: one ok, one timeout: failures are 1/2; latency metrics look only at ok; reuse = 1000/1100
     assert float(rows["2"]["fail_share_mean"]) == pytest.approx(0.5)
     assert float(rows["2"]["ttft_s_mean"]) == pytest.approx(0.2)
     assert float(rows["2"]["reuse_ratio_mean"]) == pytest.approx(1000 / 1100)
@@ -258,8 +258,8 @@ def test_kv_utilization_curve_is_live_tokens_over_B_for_the_first_seed_of_each_c
     rows = read_csv(out / "kv_util_macos.csv")
     c4 = [r for r in rows if r["run"].startswith("c4")]
     assert {r["run"] for r in c4} == {"c4_s1"}
-    assert [(float(r["t"]), float(r["kv_util"])) for r in c4] == [(0.5, 0.0), (1.0, 0.25), (2.0, 0.5)]  # live_tokens 缺失的行跳过
-    assert [float(r["kv_util"]) for r in rows if r["run"] == "c1"] == [0.5]  # B 取自各 Run 自己的 -c
+    assert [(float(r["t"]), float(r["kv_util"])) for r in c4] == [(0.5, 0.0), (1.0, 0.25), (2.0, 0.5)]  # rows with missing live_tokens are skipped
+    assert [float(r["kv_util"]) for r in rows if r["run"] == "c1"] == [0.5]  # B is taken from each Run's own -c
     assert (out / "kv_util_macos.png").stat().st_size > 0
 
 

@@ -1,6 +1,6 @@
-# 环境快照 2026-10-19 14:08:46 -0700(Phase 1 开始前,Step 0-5.5 完成后)
+# Environment snapshot 2026-10-19 14:08:46 -0700 (before Phase 1 started, after Steps 0-5.5 were done)
 
-## 机器
+## Machine
 ProductName:		macOS
 ProductVersion:		26.6.2
 BuildVersion:		25G83
@@ -11,7 +11,7 @@ perf cores: 4  efficiency cores: 6  (-t 8 => 4P + 4E)
 mem GiB: 16
 /dev/disk3s5   460Gi   328Gi   100Gi    77%    3.2M  1.0G    0%   /System/Volumes/Data
 
-## 电源/热(校准是在电池下完成的)
+## Power/thermal (calibration was done on battery)
 Now drawing from 'Battery Power'
  -InternalBattery-0 (id=22413411)	46%; discharging; 3:28 remaining present: true
  Sleep On Power Button 1
@@ -25,7 +25,7 @@ Note: No thermal warning level has been recorded
 Note: No performance warning level has been recorded
 Note: No CPU power status has been recorded
 
-## 工具链
+## Toolchain
 Apple clang version 21.0.0 (clang-2100.1.1.101)
 cmake version 4.4.4
 brew Homebrew 7.0.10
@@ -55,11 +55,11 @@ GGML_OPENMP:BOOL=ON
 GGML_OPENMP_FETCH:BOOL=OFF
 GGML_OPENMP_ENABLED:INTERNAL=OFF
 
-## 模型
+## Model
 -rw-r--r--@ 1 yunxuanli  staff  2019377696 Oct 19 13:29 /Users/yunxuanli/models/Llama-3.2-3B-Instruct-Q4_K_M.gguf
 sha256: 6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff
 
-## 后台进程(Top 8 CPU,空闲基线)
+## Background processes (top 8 by CPU, idle baseline)
  %CPU %MEM COMM
  79.7  0.1 /System/Library/PrivateFrameworks/StorageManagement.framework/PlugIns/StorageManagementService
  77.3  0.1 /System/Library/PrivateFrameworks/StorageManagement.framework/PlugIns/ApplicationsStorageExtension.appex/Contents/MacOS/ApplicationsStorageExtension

@@ -10,7 +10,7 @@ WAIT = ROOT / "scripts" / "wait_health.sh"
 
 
 def test_wait_health_prints_cold_start_seconds_once_server_is_ready():
-    with FakeServer(health_delay_s=2.0) as server:  # 先返回 503,2 s 后就绪
+    with FakeServer(health_delay_s=2.0) as server:  # returns 503 first, ready after 2 s
         r = subprocess.run([str(WAIT), "30"], env={**os.environ, "LLAMA_URL": server.url},
                            capture_output=True, text=True, timeout=60)
     assert r.returncode == 0
@@ -31,7 +31,7 @@ def test_start_server_passes_np_ctx_and_fixed_flags_then_extra_flags(tmp_path):
     stub.chmod(0o755)
     r = subprocess.run([str(START), "4", "16384", "--no-kv-unified"],
                        env={**os.environ, "LLAMA_SERVER_BIN": str(stub), "MODEL": "m.gguf",
-                            "SERVER_CONFIG": str(tmp_path / "absent.json")},  # 无冻结配置 → 默认 8 线程
+                            "SERVER_CONFIG": str(tmp_path / "absent.json")},  # no frozen config → default 8 threads
                        capture_output=True, text=True)
     assert r.returncode == 0
     assert r.stdout.split() == ["-m", "m.gguf", "--host", "127.0.0.1", "--port", "8080",

@@ -1,55 +1,55 @@
 # Memory-Aware Agent Edge Serving — Phase 1 baseline
 
-术语见 `GLOSSARY.md`,决策见 `docs/adr/`。环境:`uv venv .venv --python 3.12 && uv pip install -r requirements.lock.txt`。
+For terminology see `GLOSSARY.md`; for decisions see `docs/adr/`. Environment: `uv venv .venv --python 3.12 && uv pip install -r requirements.lock.txt`.
 
-## 测试
+## Tests
 
 ```bash
-.venv/bin/python -m pytest          # 全部测试(不需要真的 llama-server)
+.venv/bin/python -m pytest          # all tests (no real llama-server needed)
 ```
 
-## 流水线(当前已有:Workload 生成 + runner:FIFO、并发上限、开环 Poisson、超时/失败落盘、系统采样器与 manifest + 分析脚本)
+## Pipeline (currently available: Workload generation + runner: FIFO, concurrency limit, open-loop Poisson, timeouts/failures persisted, system sampler and manifest + analysis scripts)
 
 ```bash
-scripts/start_server.sh 4 16384 --no-kv-unified    # 终端 A:启动 llama-server(参数集中在脚本里)
-scripts/wait_health.sh                              # 轮询 /health,成功时打印冷启动等待秒数
+scripts/start_server.sh 4 16384 --no-kv-unified    # terminal A: start llama-server (parameters are kept in the script)
+scripts/wait_health.sh                              # poll /health; on success prints the cold-start wait in seconds
 
-# 生成 Workload(token 长度用运行中的 llama-server 校准并自检 ±5%);同种子两次输出字节一致
+# Generate a Workload (token lengths are calibrated and self-checked to ±5% against the running llama-server); two runs with the same seed give byte-identical output
 python -m src.runner.gen_workload --mix configs/mix_dev.json --t-solo configs/t_solo.json \
   --seed 1 --n-tasks 100 --out workloads/dev/default_s1.json
 
-# 执行 Workload:并发上限 c=4、到达率 λ=0.05 个/秒、FIFO,写 requests.jsonl、tasks.jsonl、system.jsonl(每 0.5 s 采样)与 manifest.json
-# (--server-pid 给 llama-server 进程号才能采 footprint/RSS 并记录启动命令行;不给则对应字段为 null 且写入 error)
-# (启动前校验 /slots 条数 ≥ c;--timeout 覆盖请求级超时,默认 120 s;--n-tasks 只提交前 N 个)
+# Execute a Workload: concurrency limit c=4, arrival rate λ=0.05 per second, FIFO; writes requests.jsonl, tasks.jsonl, system.jsonl (sampled every 0.5 s) and manifest.json
+# (pass --server-pid, the llama-server process id, to sample footprint/RSS and record the launch command line; otherwise those fields are null and an error is written)
+# (before starting, /slots count ≥ c is verified; --timeout overrides the request-level timeout, default 120 s; --n-tasks submits only the first N)
 python -m src.runner.run --workload workloads/dev/default_s1.json --c 4 --lambda 0.05 \
   --policy fifo --out results/raw/try1 --server-pid $(pgrep -f llama-server)
 
-# OAI 接口的响应没有 id_slot:把 server 日志里每个请求的 slot 选择(LRU / LCP 及相似度)按顺序对回 requests.jsonl,
-# 用来解释 agent 续步的 cached_tokens(--skip = 日志里本 Run 之前已有的 launch 数,日志被别的请求共用时必填)
+# Responses of the OAI interface carry no id_slot: map the per-request slot selection in the server log (LRU / LCP and similarity) back onto requests.jsonl in order,
+# to explain the cached_tokens of agent continuation steps (--skip = number of launches already in the log before this Run; required when the log is shared with other requests)
 python -m src.analysis.slot_trace --run results/raw/try1 --server-log server.log --skip 0
 
-# 分析:一条命令从原始日志目录(递归查找已完成的 Run 目录)重新生成全部 CSV 和图
+# Analysis: one command regenerates all CSVs and plots from the raw log directory (completed Run directories are found recursively)
 python -m src.analysis --raw results/raw/e1 --out results/analysis
 ```
 
-## 批跑 E1–E5(#9)
+## Batch E1–E5 (#9)
 
 ```bash
-.venv/bin/python scripts/run_batch.py --dry-run               # 计划与估计时长(约 19 h),不要求插电
-.venv/bin/python scripts/run_batch.py --pilots-only           # 只做各实验的 30 Task 试跑
-caffeinate -is scripts/run_batch.sh                           # 正式批跑;中断后原样重跑,从下一个 Run 继续
+.venv/bin/python scripts/run_batch.py --dry-run               # plan and estimated duration (about 19 h); AC power not required
+.venv/bin/python scripts/run_batch.py --pilots-only           # only the 30-Task pilot of each experiment
+caffeinate -is scripts/run_batch.sh                           # official batch; after an interruption, rerun as-is to continue from the next Run
 ```
 
-- 矩阵与排序在 `src/batch/plan.py`(参数在 `configs/batch.json`):E1-S(c=1/2/4/8,λ=0.9μ)→ E4(cache_prompt 关,c=1/4)→ E5(λ=0.3/0.6/1.2μ,c=4)→ E3(Tool delay 0/0.5/1/3 s,c=4)→ E1-U(`-kvu`,np=8,c=4/8);每个配置 3 次,重复 i 用 seed i;E4 的「开」和 E5 的 0.9μ 复用 E1-S 的 Run,E2 从 E1 数据按 Step 切片。
-- 每个实验先用 30 Task 试跑,过了才放开全量;试跑没过的实验记入 `results/batch/state.json` 的 `blocked_stages`,其余实验继续。
-- 每个 Run 前重启服务、记录冷启动秒数(manifest 的 `cold_start_s`);前 3 个 Task 标 `warmup`。每批开始前把电源、低电量模式和 `pmset -g therm` 写进 `results/batch/batch_start_*.json`,未插电则拒绝启动(退出码 3);批跑中途被拔电会暂停等待。
-- 通过校验的 Run 在 `results/raw/batch/<run>/`(存在 `batch_meta.json` 即视为完成);没过校验的尝试挪到 `results/batch/invalid/` 并重试(最多 3 次)。降频只记录(`batch_meta.json` 的 `throttled`),不拒绝。
-- 结束时写 `results/batch/summary.json`、`baseline_c.json`(Dev workload 上的 Fixed-concurrency baseline,规则见 `src/batch/baseline.py`)并跑分析到 `results/analysis/batch`。
+- The matrix and ordering are in `src/batch/plan.py` (parameters in `configs/batch.json`): E1-S (c=1/2/4/8, λ=0.9μ) → E4 (cache_prompt off, c=1/4) → E5 (λ=0.3/0.6/1.2μ, c=4) → E3 (Tool delay 0/0.5/1/3 s, c=4) → E1-U (`-kvu`, np=8, c=4/8); each configuration is repeated 3 times, repetition i uses seed i; E4's "on" side and E5's 0.9μ reuse the Runs of E1-S, and E2 is sliced by Step from E1 data.
+- Each experiment first does a 30-Task pilot and the full run is opened up only if it passes; an experiment whose pilot fails is recorded in `blocked_stages` of `results/batch/state.json`, and the other experiments continue.
+- The server is restarted before every Run and the cold-start seconds are recorded (`cold_start_s` in the manifest); the first 3 Tasks are marked `warmup`. Before each batch starts, the power state, low-power mode and `pmset -g therm` are written to `results/batch/batch_start_*.json`; the batch refuses to start when not on AC power (exit code 3); if the charger is unplugged mid-batch, it pauses and waits.
+- A Run that passes validation lives in `results/raw/batch/<run>/` (the presence of `batch_meta.json` marks it as complete); attempts that fail validation are moved to `results/batch/invalid/` and retried (at most 3 times). Throttling is only recorded (`throttled` in `batch_meta.json`), not rejected.
+- At the end it writes `results/batch/summary.json` and `baseline_c.json` (the Fixed-concurrency baseline on the Dev workload; rules in `src/batch/baseline.py`) and runs the analysis into `results/analysis/batch`.
 
-- 分析输出:`runs.csv`(每个 Run 一行);每张图 = 同名 `.csv` + `.png`,报告引用 CSV:`perf_by_{c,lambda,tool_delay_s}_<platform>`(吞吐/goodput、p50/p99、排队、失败/超时率,按其余配置分线,误差条 = 重复间样本标准差)、`paired_cache_prompt_<platform>`(同 seed 内 on − off)、`step_slice_<platform>`(agent 第 k 步)、`memory_peak_<platform>`、`kv_util_<platform>`。不同平台各出一套,不混画。
-- 指标口径写在 `src/analysis/metrics.py` 顶部:稳态排除 `warmup=true`;p50/p99 只算 ok Task;失败/超时进分母;吞吐和 goodput 除以稳态窗口(最早到达 → 最晚完成)。
-- 分析从 manifest 读配置:`c`、`lambda`、`seed`、`server_cmdline`(解析 `-np`、`-c`、系列 S/U)。分组还用到可选字段 `tool_delay_s`、`cache_prompt`,由批跑脚本写入 manifest;缺省为空,不影响其他分析。manifest 没有 `t_end` 的 Run 视为未完成,跳过。
+- Analysis output: `runs.csv` (one row per Run); each figure = a same-named `.csv` + `.png`, and the report cites the CSV: `perf_by_{c,lambda,tool_delay_s}_<platform>` (throughput/goodput, p50/p99, queueing, failure/timeout rate, lines split by the remaining configuration, error bars = sample standard deviation across repetitions), `paired_cache_prompt_<platform>` (on − off within the same seed), `step_slice_<platform>` (k-th step of agents), `memory_peak_<platform>`, `kv_util_<platform>`. A separate set is produced for each platform; they are not plotted together.
+- The metric definitions are at the top of `src/analysis/metrics.py`: steady state excludes `warmup=true`; p50/p99 count only ok Tasks; failures/timeouts are in the denominator; throughput and goodput are divided by the steady-state window (earliest arrival → latest completion).
+- The analysis reads its configuration from the manifest: `c`, `lambda`, `seed`, `server_cmdline` (parsing `-np`, `-c`, series S/U). Grouping also uses the optional fields `tool_delay_s` and `cache_prompt`, written into the manifest by the batch script; when absent they are empty and do not affect other analyses. A Run whose manifest has no `t_end` is considered incomplete and skipped.
 
-- `configs/mix_dev.json` 与 `mix_eval.json`:种子范围(1–5 / 101–105)与混合比例各不相同;种子不在所属范围内会拒绝生成。
-- `configs/t_solo.json`:T_solo 表(输入配置,不写死在代码里);`deadline_s = 5 × T_solo`,agent 按自己的步数与 Tool delay 计算。
-- Workload 是 JSON(`sort_keys`,稳定字节),每个 Task 的 `steps` 已是完整的用户消息、`max_tokens` 和 Step 后的 Tool delay。
+- `configs/mix_dev.json` and `mix_eval.json`: seed ranges (1–5 / 101–105) and mix ratios differ; generation is refused if the seed is not in its range.
+- `configs/t_solo.json`: the T_solo table (an input config, not hard-coded); `deadline_s = 5 × T_solo`, and agents compute it from their own number of steps and Tool delays.
+- A Workload is JSON (`sort_keys`, stable bytes); each Task's `steps` already hold the complete user messages, `max_tokens` and the Tool delay after the Step.

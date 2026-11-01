@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage: sampler.sh PID OUT.csv  -- 每 ~1s 记录 t, rss_kb, footprint_mb(出错也写一行)
+# usage: sampler.sh PID OUT.csv  -- every ~1s record t, rss_kb, footprint_mb (a row is also written on error)
 PID=$1; OUT=$2; echo "t,rss_kb,footprint_mb,err" > "$OUT"
 while kill -0 $PID 2>/dev/null; do
   T=$(python3 -c 'import time;print(f"{time.time():.3f}")')

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""批跑 E1–E5(#9):可分批过夜、可恢复。通常经 scripts/run_batch.sh 启动。
+"""Batch E1–E5 (#9): can be run in overnight batches and is resumable. Usually started via scripts/run_batch.sh.
 
-    .venv/bin/python scripts/run_batch.py --dry-run          # 只打印计划和估计时长,不要求插电
-    .venv/bin/python scripts/run_batch.py [--only E1-S E4]   # 正式批跑;中断后原样重跑即从下一个 Run 继续
+    .venv/bin/python scripts/run_batch.py --dry-run          # only print the plan and estimated duration; AC power not required
+    .venv/bin/python scripts/run_batch.py [--only E1-S E4]   # official batch; after an interruption, rerun as-is to continue from the next Run
 
-退出码:0 全部完成;1 有 Run 失败或实验被试跑拦下;2 参数错;3 门禁不过(未插电/低电量模式)拒绝启动;4 预检不过(Workload 缺失/被改、8080 被占)。
-细节(目录布局、重试、试跑门禁)见 src/batch/driver.py 顶部。
+Exit codes: 0 all done; 1 a Run failed or an experiment was blocked by its pilot; 2 bad arguments; 3 gate failed (not on AC / low-power mode), refusing to start; 4 pre-check failed (Workload missing/modified, port 8080 in use).
+For details (directory layout, retries, pilot gate) see the top of src/batch/driver.py.
 """
 import argparse
 import json
@@ -35,9 +35,9 @@ def print_plan(cfg: dict, only: list[str] | None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", nargs="+", help="只跑这些实验(E1-S E4 E5 E3 E1-U)")
+    ap.add_argument("--only", nargs="+", help="run only these experiments (E1-S E4 E5 E3 E1-U)")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--pilots-only", action="store_true", help="只做各实验的 30 Task 试跑(通过的试跑之后不会重做)")
+    ap.add_argument("--pilots-only", action="store_true", help="only do the 30-Task pilot of each experiment (a passed pilot is not redone afterwards)")
     a = ap.parse_args()
     cfg = json.loads((ROOT / "configs/batch.json").read_text())
     if a.only and not set(a.only) <= {s.experiment for s in build_plan(cfg)}:
@@ -48,7 +48,7 @@ def main() -> None:
     if problems:
         print("preflight failed:\n  " + "\n  ".join(problems), file=sys.stderr)
         sys.exit(4)
-    # 插电也会空闲睡眠(#7 里睡了 644 s 和 900 s):本进程存活期间不允许系统空闲睡眠
+    # AC power also has idle sleep (it slept 644 s and 900 s in #7): do not allow system idle sleep while this process is alive
     subprocess.Popen(["caffeinate", "-is", "-w", str(os.getpid())])
     print_plan(cfg, a.only)
     code = Batch(cfg, ROOT, MacHooks(ROOT).hooks(), only=a.only, therm_sample_s=THERM_SAMPLE_S,

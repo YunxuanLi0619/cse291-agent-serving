@@ -1,12 +1,12 @@
-"""把 llama-server 日志里的 slot 选择对回 requests.jsonl(OAI 接口的响应没有 id_slot)。
+"""Map the slot selections in the llama-server log back to requests.jsonl (the OAI endpoint's responses have no id_slot).
 
-server 日志每个被接受的请求按序出现一对 `selected slot by ...` + `launch_slot_`;请求按 t_start 排序后
-与之一一对应。数量对不上(有请求没到 server 就被取消)时拒绝对应,不猜。
+For every accepted request the server log has a pair `selected slot by ...` + `launch_slot_` in order; requests sorted by t_start
+are matched one-to-one with them. If the counts differ (some request was cancelled before reaching the server), refuse to match rather than guess.
 
-对应是按顺序做的,所以会用 server 释放 slot 时的 n_tokens(= prompt + 输出)逐个核对 ok 请求;
-对不上(c>1 时同时启动的请求可能在 server 里换了顺序)就报错,不给出可能错位的结果。
+Matching is done in order, so each ok request is checked against n_tokens (= prompt + output) when the server releases the slot;
+on a mismatch (with c>1, requests started at the same time may be reordered inside the server) it raises an error instead of returning a possibly misaligned result.
 
-用法: python -m src.analysis.slot_trace --run results/raw/x/run --server-log results/raw/x/server.log
+Usage: python -m src.analysis.slot_trace --run results/raw/x/run --server-log results/raw/x/server.log
 """
 import argparse
 import json
@@ -56,9 +56,9 @@ def join_requests(requests: list[dict], launches: list[dict]) -> list[dict]:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True, help="含 requests.jsonl 的 Run 目录")
+    ap.add_argument("--run", required=True, help="Run directory containing requests.jsonl")
     ap.add_argument("--server-log", required=True)
-    ap.add_argument("--skip", type=int, help="server 日志里本 Run 之前已有的 launch 数(日志被别的请求共用时必填)")
+    ap.add_argument("--skip", type=int, help="number of launches already in the server log before this Run (required when the log is shared with other requests)")
     a = ap.parse_args(argv)
     requests = [json.loads(line) for line in (Path(a.run) / "requests.jsonl").read_text().splitlines() if line]
     launches = parse_server_log(Path(a.server_log).read_text().splitlines())

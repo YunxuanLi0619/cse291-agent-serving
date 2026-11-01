@@ -1,4 +1,4 @@
-"""批跑驱动的真实副作用(macOS):pmset、llama-server 进程、runner 子进程、分析冒烟。"""
+"""Real side effects of the batch driver (macOS): pmset, the llama-server process, the runner subprocess, the analysis smoke test."""
 import signal
 import socket
 import subprocess
@@ -12,11 +12,11 @@ import httpx
 from .driver import Hooks
 from .plan import RunSpec
 
-REPO_DIR = Path(__file__).resolve().parent.parent.parent  # 代码和脚本所在;数据根目录 root 可以另指(测试)
+REPO_DIR = Path(__file__).resolve().parent.parent.parent  # where code and scripts live; the data root can point elsewhere (tests)
 HEALTH_TIMEOUT_S = 180
 STOP_TIMEOUT_S = 30
-SETTLE_S = 3  # 关掉 server 后留一点时间,让端口和内存释放
-RUNNER_SLACK_S = 1800  # 到达期之外的余量:最后一个 Task 的排空(≤300 s)、重启、波动
+SETTLE_S = 3  # after stopping the server, wait a little so the port and memory are released
+RUNNER_SLACK_S = 1800  # margin beyond the arrival period: draining the last Task (<=300 s), restart, fluctuation
 
 
 def port_in_use(host: str = "127.0.0.1", port: int = 8080) -> bool:
@@ -30,7 +30,7 @@ def _pmset(*args: str) -> str:
 
 
 class ServerProcess:
-    """start_server.sh 末尾是 exec,所以 Popen 的 pid 就是 llama-server。"""
+    """start_server.sh ends with exec, so the Popen pid is llama-server itself."""
 
     def __init__(self, proc: subprocess.Popen, log, cold_start_s: float):
         self.proc, self._log, self.pid, self.cold_start_s = proc, log, proc.pid, cold_start_s
@@ -93,7 +93,7 @@ class MacHooks:
                "--base-url", self.base_url, "--c", str(spec.c), "--lambda", str(spec.lam), "--policy", "fifo",
                "--n-tasks", str(spec.n_tasks), "--server-pid", str(handle.pid),
                "--cache-prompt", "on" if spec.cache_prompt else "off", "--cold-start-s", str(handle.cold_start_s)]
-        timeout = spec.n_tasks / spec.lam * 1.6 + RUNNER_SLACK_S  # 到达期的 Poisson 波动留 60% 余量
+        timeout = spec.n_tasks / spec.lam * 1.6 + RUNNER_SLACK_S  # leave a 60% margin for Poisson fluctuation of the arrival period
         with open(run_dir / "runner.log", "w") as log:
             try:
                 return subprocess.run(cmd, cwd=REPO_DIR, stdout=log, stderr=subprocess.STDOUT, timeout=timeout).returncode

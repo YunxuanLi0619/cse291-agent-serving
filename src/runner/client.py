@@ -1,7 +1,7 @@
-"""Request 客户端:流式调用 llama-server,记录首个 token 与结束时刻,取最后一个数据 chunk 的 timings。
+"""Request client: calls llama-server in streaming mode, records the first token and end times, and takes `timings` from the last data chunk.
 
-失败统一抛 RequestFailed(status, error_type);超时由调用方用 asyncio.timeout 控制,
-取消时 httpx 会关闭连接,即「主动断开」。
+Failures are uniformly raised as RequestFailed(status, error_type); timeouts are controlled by the caller via asyncio.timeout,
+and on cancellation httpx closes the connection, which is the "active disconnect".
 """
 import json
 from dataclasses import dataclass
@@ -18,22 +18,22 @@ class RequestFailed(Exception):
 
 @dataclass
 class StreamResult:
-    """就地填充:失败或被取消时,调用方仍能读到已经发生的部分(如 t_first_token)。"""
+    """Filled in place: on failure or cancellation the caller can still read what already happened (e.g. t_first_token)."""
     text: str = ""
     t_first_token: float | None = None
     t_end: float | None = None
-    n_pieces: int = 0  # 已收到的非空内容 chunk 数,≈ 已生成 token 数
+    n_pieces: int = 0  # number of non-empty content chunks received, ≈ number of generated tokens
     timings: dict | None = None
 
 
 def _classify_error(status_code: int, payload: object) -> RequestFailed:
-    """payload 是 server 返回的 {"error": {...}}(HTTP 错误体,或流中 SSE error 事件)。"""
+    """payload is the {"error": {...}} returned by the server (an HTTP error body, or an SSE error event in the stream)."""
     err = payload.get("error") if isinstance(payload, dict) else None
     err = err if isinstance(err, dict) else {}
-    if err.get("type") == "exceed_context_size_error":  # 400:单个请求超过 slot 容量
+    if err.get("type") == "exceed_context_size_error":  # 400: a single request exceeds the slot capacity
         return RequestFailed("error_ctx_exceeded", "ctx_exceeded")
     if "Context size has been exceeded" in str(err.get("message", "")):
-        return RequestFailed("error_http", "pool_exhausted")  # 共享池耗尽,单独分类
+        return RequestFailed("error_http", "pool_exhausted")  # shared pool exhausted, classified separately
     return RequestFailed("error_http", f"http_{status_code}")
 
 
@@ -60,7 +60,7 @@ async def stream_chat(client: httpx.AsyncClient, messages: list[dict], max_token
                     chunk = json.loads(line[len("data: "):])
                 except ValueError as e:
                     raise RequestFailed("error_other", "malformed_stream") from e
-                if "error" in chunk:  # 已发过 chunk 后的错误:HTTP 200 + SSE error 事件
+                if "error" in chunk:  # error after chunks were already sent: HTTP 200 + SSE error event
                     raise _classify_error(r.status_code, chunk)
                 choices = chunk.get("choices") or []
                 piece = choices[0].get("delta", {}).get("content") if choices else None
@@ -69,12 +69,12 @@ async def stream_chat(client: httpx.AsyncClient, messages: list[dict], max_token
                         out.t_first_token = now()
                     pieces.append(piece)
                     out.n_pieces += 1
-                if "timings" in chunk:  # 在 finish_reason 那个 chunk 上,[DONE] 之前
+                if "timings" in chunk:  # on the chunk carrying finish_reason, before [DONE]
                     out.timings = chunk["timings"]
-    except httpx.HTTPError as e:  # 连接失败、读到一半被断开等
+    except httpx.HTTPError as e:  # connection failure, disconnect mid-read, etc.
         raise RequestFailed("error_other", type(e).__name__) from e
     out.text = "".join(pieces)
     out.t_end = now()
-    if not done:  # 流在 [DONE] 之前就结束 = 中途断连
+    if not done:  # stream ended before [DONE] = disconnect mid-stream
         raise RequestFailed("error_other", "incomplete_stream")
     return out

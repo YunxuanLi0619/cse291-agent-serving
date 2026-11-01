@@ -1,22 +1,22 @@
-"""批跑矩阵(#9):把 E1–E5 展开成有序的 Run 列表。纯逻辑,不碰文件、进程和网络。
+"""Batch matrix (#9): expand E1-E5 into an ordered list of Runs. Pure logic, no files, processes or network.
 
-- 优先级(手册 Step 9):E1-系列 S → E4 → E5 → E3 → E1-系列 U;E2 用 E1 数据按 Step 切片,不单独跑。
-- 重复 i 用 seed i(Workload `default_s<i>.json`),所以同 seed 的不同配置是同一份 Task 序列,可以配对。
-- E4 的 cache_prompt=on 和 E5 的 λ=0.9μ 就是 E1-S 的 Run,不重跑,只记在 `reused`。
-- Stage 内按「重复轮次」排序、轮内配置顺序隔轮反向:降频之类的漂移分摊到各配置,中途被迫停下时每个配置也都有数据。
+- Priority (manual Step 9): E1-series S -> E4 -> E5 -> E3 -> E1-series U; E2 is sliced from the E1 data by Step and is not run separately.
+- Repeat i uses seed i (Workload `default_s<i>.json`), so different configurations with the same seed see the same Task sequence and can be paired.
+- E4's cache_prompt=on and E5's lambda=0.9*mu are Runs of E1-S: not rerun, only recorded in `reused`.
+- Within a Stage, order by "repeat round", and reverse the configuration order every other round: drift such as throttling is spread across configurations, and every configuration still has data if the batch is forced to stop midway.
 """
 from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
 class RunSpec:
-    series: str  # "S":np = c、每 slot 容量 B/c;"U":共享池 -kvu
+    series: str  # "S": np = c, per-slot capacity B/c; "U": shared pool -kvu
     np: int
-    ctx: int  # B,总 KV token 数
+    ctx: int  # B, total number of KV tokens
     c: int
     lam: float
     cache_prompt: bool
-    tool_delay_s: float | None  # None = Workload 自带的随机 Tool delay
+    tool_delay_s: float | None  # None = the random Tool delay that ships with the Workload
     seed: int
     n_tasks: int
     pilot: bool = False
@@ -33,7 +33,7 @@ class RunSpec:
 
     @property
     def estimated_s(self) -> float:
-        """粗估墙钟:到达期 n/λ + 排空与重启约 150 s(只用来在日志里报 ETA,不参与任何判断)。"""
+        """Rough wall clock: arrival period n/lambda + about 150 s for draining and restart (only used to report an ETA in the log, never in any decision)."""
         return self.n_tasks / self.lam + 150
 
     @property
@@ -48,12 +48,12 @@ class RunSpec:
 class Stage:
     experiment: str
     pilot: RunSpec
-    runs: list[RunSpec]  # 只含本 Stage 新增的 Run
-    reused: list[str]  # 复用的、别的 Stage 已有的 Run 名
+    runs: list[RunSpec]  # only the Runs added by this Stage
+    reused: list[str]  # names of reused Runs that already exist in other Stages
 
 
 def _order(specs: list[RunSpec]) -> list[RunSpec]:
-    """配置按出现顺序编号;第 seed 轮里奇数轮正序、偶数轮倒序。"""
+    """Configurations are numbered in order of appearance; in round `seed`, odd rounds go forward and even rounds backward."""
     configs = list(dict.fromkeys(replace(s, seed=0) for s in specs))
     by_seed: dict[int, dict] = {}
     for s in specs:

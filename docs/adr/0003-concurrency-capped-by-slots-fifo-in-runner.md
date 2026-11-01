@@ -1,5 +1,5 @@
-# 并发 c ≤ np,排队由 runner 自己的 FIFO 负责
+# Concurrency c ≤ np, with queueing handled by the runner's own FIFO
 
-runner 持有 FIFO 队列,任何时刻在飞请求数 ≤ c ≤ np。runner 启动时校验 `/slots` 条数 ≥ c,否则拒绝运行。
+The runner owns the FIFO queue, and the number of in-flight requests is ≤ c ≤ np at all times. At startup the runner verifies that the `/slots` count ≥ c and refuses to run otherwise.
 
-如果 c > np,多出的请求会在 llama-server 内部排队(`requests_deferred`),排队时间不再受我们的调度器控制,"自己控制的 FIFO"和 Phase 2 的调度策略都会失效,排队时间也无法归因。
+If c > np, the extra requests queue inside llama-server (`requests_deferred`), the queueing time is no longer controlled by our scheduler, both the "FIFO that we control ourselves" and Phase 2's scheduling policy become ineffective, and queueing time cannot be attributed.
