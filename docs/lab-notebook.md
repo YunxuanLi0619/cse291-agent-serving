@@ -248,3 +248,17 @@ Dev workload(`workloads/dev/default_s1.json`,seed 1,100 个 Task:short 39 / long
   2. 全量 pytest 曾有一次在 `test_runner.py::test_failures_are_classified_and_never_drop_a_task` 挂起 16 分钟以上,没能复现(单文件 12.8 s 通过,全量 138 个在 76 s 内通过);按偶发 flake 记录。
 - **没做的:** E4 的「共享 / 不共享 system prompt」变体;E1-U 的 c∈{1,2}(规划里只跑了 {4,8})。
 - **背景干扰:** 机器上有 XProtect 偶发占 CPU,我无法排除,也无法在数据里单独识别;同配置三个 seed 之间没有看到明显离群的 Run,但没有做过系统的离群检验。
+
+### 2026-11-01 #9 更正:E1-S 的 c=8 是靠"拒掉 longctx"才显得最好,baseline c=8 不能直接用
+上一条里「c=8 是过载区间里的相对最优」的说法不完整,按 `tasks.jsonl` 的 status 逐类统计(E1-S,稳态 Task,3 个 seed 合计)后更正如下:
+| c | 每个 slot 容量 | longctx | agent | longgen | short |
+|---|---|---|---|---|---|
+| 1 | 16384 | 62 ok | 9 ok / 44 timeout | 27 ok / 33 timeout | 8 ok / 108 timeout |
+| 2 | 8192 | 62 ok | 12 / 41 | 23 / 37 | 9 / 107 |
+| 4 | 4096 | 62 ok | 17 / 36 | 19 / 41 | 22 / 94 |
+| 8 | **2048** | **0 ok / 62 `error_ctx_exceeded`** | 42 ok / 11 `error_ctx_exceeded` | 52 / 8 timeout | 111 / 5 timeout |
+- **c=8 的 slot 只有 2048 token,longctx 全部、agent 的 11 个直接 `error_ctx_exceeded`**(秒级失败,不占 slot 也不排队)。最重的负载(longctx,T_solo 26.4 s,占 20% 的 Task)被整个拒掉,剩下的 short/longgen 才不超时。所以 c=8 的 goodput 0.052 和 fail 29.6% 不是"并发 8 更快",而是"并发 8 把一类 Task 拒了"。`baseline_c.json` 里 c=8 的 `p99_deadline_ratio=1.40` 也只统计了 ok 的 Task,看不出这一点。
+- **c=1/2/4 的失败主要是 short 超时(short 的任务级超时只有 32 s):** longctx 全 ok,但每个占 slot 26 s 左右,FIFO 下后面的 short 排队超过 32 s 就超时。同一 λ 下 c 越大 short 超时越少(108 → 107 → 94 个),但改善很小。
+- **c=1 在 λ=0.088 下按算术就过载,不是意外:** 平均服务时间 S̄ ≈ 15.3 s → 单流容量 ≈ 1/15.3 = 0.065 task/s < 0.088。c=2、c=4 的容量取决于 P_eff(未在插电后重测),E5 说明 c=4 在 λ ≈ 0.03–0.05 之间饱和。
+- **对 baseline 的含义:** 现行规则(`src/batch/baseline.py`)只算 ok Task 的 p99,并且在没有任何 c 可接受时回退到 goodput 最大者,这会把"拒掉 longctx 的 c=8"选出来。**这个 c=8 不应该当作 Fixed-concurrency baseline。** 在下面的问题解决前,baseline c 视为**未定**:① 在 λ ≈ 0.03–0.05 补测 E1(c=1/2/4 才有可能满足 p99 与 fail 率);② 规则里把 `error_ctx_exceeded` 单独当成不可接受(任何 c 只要有 ctx_exceeded 就不合格)。
+- **E1-U 与 E1-S c=8 的对比同样作废:** 上一条里「E1-U 比 E1-S c=8 差」是拿一个没有 longctx 的 c=8 比,不成立。E1-U(共享池)没有 2048 的单 slot 上限,longctx 会正常跑,应该和 E1-S 的 c=4(同样跑 longctx)比较:U c=4 fail 65% 对 S c=4 58.8%,U c=8 fail 76%。
