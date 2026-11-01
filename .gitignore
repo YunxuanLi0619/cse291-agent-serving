@@ -8,3 +8,6 @@ results/raw/*.tmp
 *.pdf
 .pytest_cache/
 .mypy_cache/
+
+# 例外:Phase 1 报告 PDF 要入库(课程讲义 PDF 仍然不入库)
+!report/phase1/phase1_report.pdf

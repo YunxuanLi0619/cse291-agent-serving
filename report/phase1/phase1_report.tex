@@ -1,0 +1,142 @@
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[preprint]{icml2026}
+\usepackage{newtxtext,newtxmath} % Times via TeX Live fonts (the template's \texttt{times} lacks bold/italic under tectonic)
+
+\icmltitlerunning{Memory-Aware Agent Edge Serving: Phase 1}
+
+\begin{document}
+
+\twocolumn[
+  \icmltitle{Memory-Aware Agent Edge Serving:\\ Phase 1 Baseline and Measurements}
+
+  \begin{icmlauthorlist}
+    \icmlauthor{Yunxuan Li}{cse}
+    \icmlauthor{Max Huang}{cse}
+  \end{icmlauthorlist}
+  \icmlaffiliation{cse}{CSE 291A (Fall 2026), UC San Diego; course project, Option 1, Phase 1 report}
+  \icmlcorrespondingauthor{Yunxuan Li}{yul386@ucsd.edu}
+  \icmlcorrespondingauthor{Max Huang}{mah067@ucsd.edu}
+  \icmlkeywords{LLM serving, agent workloads, KV cache, admission control, llama.cpp}
+
+  \vskip 0.3in
+]
+
+\printAffiliationsAndNotice{}
+
+\begin{abstract}
+On a memory-constrained machine, how should a server admit and schedule concurrent agent tasks so that completed work increases while memory stays bounded? We build a runner-owned FIFO baseline over llama.cpp with a seeded workload of short, long-context, long-generation, and multi-step agent tasks, and measure 45 runs (17.9\,h) on a CPU-only laptop. Memory is fixed at launch, so the budget is KV capacity. A static slot partition forces a choice between concurrency and admissible context, and the dominant bottleneck is CPU compute surfacing as FIFO queueing. Retained context helps but is fragile. These findings motivate KV-budget admission with size-aware ordering for Phase 2.
+\end{abstract}
+
+\section{Problem and Setup}
+\label{sec:setup}
+\paragraph{Question.} Admitting too much agent work raises latency or exhausts memory; admitting too little idles the machine. Phase 1 builds the FIFO baseline and measures what limits it.
+
+\paragraph{Environment (all pinned).} MacBook Air (M4, 16\,GB, 10 cores) on AC power, no thermal warning recorded. CPU-only \texttt{llama-server} (llama.cpp \texttt{1b29621}, b11741, Metal off), Llama-3.2-3B-Instruct Q4\_K\_M (sha256 \texttt{6c1a2b41\ldots28ff}), \texttt{-t 8 --cache-ram 0}. The memory budget $B$ is the total KV-token count (\texttt{-c 16384}, 1792\,MiB at 112\,KiB/token). \emph{Series S} fixes $B$ and sets \texttt{-np}$=c$, so each slot holds $B/c$ tokens; \emph{series U} uses one shared pool (\texttt{-kvu -np 8}).
+
+\paragraph{Workload.} A seeded, byte-reproducible Dev workload (seeds 1--3 here; Eval seeds 101--105 with a different mix are untouched): 100 tasks, mix 40/20/20/20 of \emph{short} (256 in/64 out tokens), \emph{longctx} (3000/64), \emph{longgen} (256/512), and \emph{agent} (about 800-token context, 3--6 steps of 128 tokens, tool delay 0.2--3\,s). Arrivals are open-loop Poisson. Each task embeds a random needle checked programmatically (single-stream pass rate 100/95/100/95\%). The runner owns a step-level FIFO with $c\le$ \texttt{-np}; tool delays hold no slot.
+
+\paragraph{Metrics and rules.} Per-request and per-task logs, a 0.5\,s system sampler, and a per-run manifest (git sha, versions, command line, workload hash). Deadline is $5\,T_{\mathrm{solo}}$ (frozen); task timeout is $\min(300,10\,T_{\mathrm{solo}})$\,s with active disconnect. Failures and timeouts stay in every denominator; the first 3 tasks of each run are warm-up and excluded. Peak memory is macOS \texttt{footprint}, because RSS is unreliable here (idle RSS of one configuration ranged 689--4678\,MB across launches); \texttt{footprint} omits about 294\,MB of memory-mapped weights, so it is a lower bound.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figs/fig1.pdf}
+\caption{(a) Outcome of steady-state tasks (3 seeds, 291 tasks per bar). (b) Failure rate at $c{=}4$ versus arrival rate. (c) Peak \texttt{footprint} for every configuration (S: $np{=}c$; U: shared pool). Data: \texttt{results/analysis/batch/*.csv}.}
+\label{fig:main}
+\end{figure*}
+
+\section{Results}
+\label{sec:results}
+All 45 Dev runs passed validity checks: concurrency sweep E1 ($c\in\{1,2,4,8\}$ in S, $\{4,8\}$ in U, $\lambda{=}0.088$ task/s), tool delay E3 (0--3\,s), \texttt{cache\_prompt} on/off E4 ($c\in\{1,4\}$), and arrival rate E5 ($c{=}4$), each with 3 seeds.
+
+\paragraph{F1: Memory is fixed at launch, so the budget is KV capacity.} The KV buffer is allocated and zeroed once at startup, and peak \texttt{footprint} is 3.84--3.90\,GB in every run (Fig.~\ref{fig:main}c), independent of $c$, $\lambda$, and series. Doubling \texttt{-c} raised idle \texttt{footprint} by 1795\,MB, matching the 1792\,MiB KV difference. Memory pressure thus appears as slot capacity and admission, not as growth.
+
+\paragraph{F2: A fixed partition trades concurrency against admissible context.} At $c{=}8$ a slot holds 2048 tokens, so all 62 longctx tasks and 11 of 53 agent tasks fail within seconds with \texttt{error\_ctx\_exceeded} (Table~\ref{tab:type}). The $c{=}8$ goodput of 0.052 task/s (vs.\ 0.015 at $c{=}4$) comes from rejecting the heaviest task class, not from serving faster, so $c{=}8$ is \emph{not} a valid baseline. Series U has no admission control and was not better than S at $c{=}4$ (65\% vs.\ 59\% failed, sd about 10 points). Source reading shows pool exhaustion returns HTTP 500 to \emph{all} running requests; our 6 U runs never hit it. All $c$ are overloaded at $\lambda{=}0.088$; excluding $c{=}8$, $c{=}4$ has the best goodput and is our fixed-concurrency baseline. It also passes a relaxed rule (no \texttt{ctx\_exceeded}, at most 10\% failures) at $\lambda{=}0.029$, where $c{=}1,2$ were not run. We relaxed the rule after seeing the data; the original p99$\le$deadline rule picks $c{=}8$.
+
+\begin{table}[t]
+\caption{Completed tasks by type (S, $\lambda{=}0.088$, 3 seeds). All other failures are task timeouts unless marked ``ctx''.}
+\label{tab:type}
+\centering\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Type (total) & $c{=}1$ & $c{=}2$ & $c{=}4$ & $c{=}8$ \\
+\midrule
+short (116)   & 8  & 9  & 22 & 111 \\
+longctx (62)  & 62 & 62 & 62 & 0 (62 ctx) \\
+longgen (60)  & 27 & 23 & 19 & 52 \\
+agent (53)    & 9  & 12 & 17 & 42 (11 ctx) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{F3: The dominant bottleneck is CPU compute, expressed as FIFO queueing.} Aggregate throughput barely grows with concurrency: 38.3 tok/s at $c{=}4$ vs.\ 42.8 at $c{=}8$. Service time inflates under contention even when unsaturated ($c{=}4$, $\lambda{=}0.029$): median longgen 29.6\,s vs.\ $T_{\mathrm{solo}}$ 15.95\,s, and longctx 35.1 vs.\ 26.4\,s. The capacity estimate $\mu{=}0.098$ task/s was too high: at $c{=}4$ failures rise 3\%$\to$52\%$\to$59\%$\to$82\% across $\lambda{=}0.029\ldots0.118$ (Fig.~\ref{fig:main}b), so saturation lies near 0.03--0.05 task/s ($0.3$--$0.5\,\mu$). Above saturation almost all failures are timeouts, and short tasks suffer most: 81\% timed out at $c{=}4$, with a median queue wait of 31.9\,s against a 32\,s limit, while 26--45\,s longctx tasks hold slots. This is consistent with head-of-line blocking, which we have not yet isolated.
+
+\paragraph{F4: Retained context matters but is fragile.} With \texttt{cache\_prompt} on, agent steps $\ge2$ reuse 24\% ($c{=}1$) and 54\% ($c{=}4$) of their prompt tokens, versus 0\% off. Paired on/off differences favor caching (p50 $-27$\,s at $c{=}1$, $-36$\,s at $c{=}4$; failures $-9.6$/$-18.6$ points), but both sides are overloaded and there are only 3 pairs with large sd (14 and 51\,s), so only the direction is reliable. We observed the mechanism directly: during a tool delay, an unrelated short request was routed by prefix similarity (0.125, above the 0.10 threshold) to the agent's slot and overwrote its prefix. E3 (tool delay 0--3\,s) shows no trend; overload swamps it.
+
+\section{Phase 2 Direction}
+\label{sec:phase2}
+FIFO with a fixed $c$ cannot see the one resource that differs across tasks: KV tokens. A static partition rejects long contexts at high $c$; a low $c$ serializes everything behind long steps (F2, F3). We will build \emph{one} mechanism: \textbf{KV-budget admission with size-aware ordering on the shared pool.} Each ready step has a known cost (prompt tokens plus \texttt{max\_tokens}). The scheduler admits it only if the sum of reserved tokens stays within $B$, so concurrency adapts to task size (many short steps, few long ones) with no \texttt{ctx\_exceeded} and no pool exhaustion. Among ready steps it prefers cheaper and continuing agent steps, relieving F3. A cache-aware extension pins a continuation to its previous slot via the request-level \texttt{id\_slot} (present in the source; to be verified on the OAI endpoint) and is compared against the fixed policy (\texttt{cache\_prompt} on) and off (F4).
+
+\paragraph{Evaluation plan.} Compare against FIFO and the tuned fixed-$c$ baseline on the Eval workload (seeds 101--105, different mix), sweeping $\lambda$ from under- to overload, including the underloaded case where no gain is expected. Report completed tasks, p50/p99 latency, throughput, peak memory, failure rate, and quality pass against the 100/95/100/95\% baseline, so gains cannot come from skipped tasks or shortened output, plus policy overhead and long-task fairness (longctx p99). Timeline: Appendix~A; full metrics: Appendix~B.
+
+\section{Limitations}
+Single laptop, CPU-only, one model: numbers may not transfer to AWS or Metal. Three seeds of 100 tasks, and most E1/E3/E4 points are in overload, so effect sizes are weak; the $\lambda$ grid came from a capacity estimate that proved too high. Background load (XProtect) was not excluded.
+
+\appendix
+\renewcommand{\thesection}{Appendix \Alph{section}}
+\onecolumn
+\section{Timeline and Milestones}
+\label{app:timeline}
+\paragraph{Phase 1 (completed; dates from the git history and lab notebook).}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}p{1.0in}p{5.6in}@{}}
+\toprule
+Date & Milestone \\
+\midrule
+Oct 18 & Option 1 chosen; course and project requirements read. \\
+Oct 19 & Sample reports reviewed; pinned llama.cpp and model; memory baseline; capacity calibration; metrics fixed. Runner built test-first against a fake server: workload generator, FIFO, Poisson arrivals, timeouts, agent tasks, sampler, manifest, analysis command. \\
+Oct 30 & Pre-batch checks: \texttt{-t 8} frozen after interleaved comparison; $T_{\mathrm{solo}}$ re-measured on AC power (23--29\% faster, so $\lambda$ grid and deadlines recomputed); $c{=}8$ throughput; cold start. \\
+Oct 31 & Real-server smoke test (30 tasks, logs complete); single-stream quality baseline and frozen deadlines (Dev workload hash fixed); resumable batch runner with 30-task pilots. \\
+Oct 31--Nov 1 & 45-run E1--E5 batch (about 17\,h, no failed runs or throttling); analysis; correction that $c{=}8$ looks best only because it rejects longctx. This report written Nov 1. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Phase 2 plan (due December 10, 2026).}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{@{}p{1.0in}p{5.6in}@{}}
+\toprule
+Window & Milestone and exit criterion \\
+\midrule
+Nov 2--8 & \textbf{M1, baseline.} Confirm baseline $c{=}4$ by running E1 at $\lambda{=}0.045$ ($c{=}1,2,4$); verify \texttt{id\_slot} pinning on the OAI endpoint; deliberately exhaust a U pool to observe the failure mode. \emph{Exit:} baseline $c$ confirmed in a non-overloaded regime. \\
+Nov 9--15 & \textbf{M2, mechanism.} Implement KV-budget admission and size-aware ordering behind the scheduling-policy interface; fake-server tests; 30-task pilots. \emph{Exit:} no admitted step exceeds the budget. \\
+Nov 16--22 & \textbf{M3, tune and freeze} on Dev seeds only; ordering ablation to test the head-of-line explanation; freeze parameters. \\
+Nov 23--Dec 1 & \textbf{M4, Eval runs} (seeds 101--105; $\lambda$ sweep and mix shift; FIFO vs.\ tuned fixed $c$ vs.\ new policy; cache-aware vs.\ fixed cache policy; at least 3 repeats). Thanksgiving, Nov 26: runs unattended. \\
+Dec 2--6 & \textbf{M5, analysis.} Quality parity, overhead, fairness, no-benefit regimes, failure accounting. \\
+Dec 7--10 & \textbf{M6, report and artifacts.} Final report; clean-clone reproduction of all figures; tag and submit on Dec 10. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Performance Summary}
+\label{app:perf}
+Mean over 3 seeds (Dev workload, warm-up excluded; \texttt{cache\_prompt} on except E4). p50/p99 cover \emph{completed} tasks only, so they flatter configurations that reject work (S, $c{=}8$ rejects all longctx). Thr.\ = completed tasks/s over the steady-state window; Goodput counts only tasks meeting deadline and quality check; Fail = share of tasks not completed; Peak = max \texttt{footprint}. Standard deviations and queue times: \texttt{perf\_by\_c\_macos.csv}.
+
+\begin{center}
+\footnotesize
+\input{tables/perf_table.tex}
+\end{center}
+
+\paragraph{Reproduction.} Raw runs: \texttt{results/raw/batch/}. \texttt{python -m src.analysis} regenerates the CSVs; \texttt{report/phase1/make\_figs.py} and \texttt{make\_table.py} regenerate Fig.~\ref{fig:main} and this table.
+
+\end{document}
