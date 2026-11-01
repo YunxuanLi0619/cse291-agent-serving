@@ -262,3 +262,11 @@ Dev workload(`workloads/dev/default_s1.json`,seed 1,100 个 Task:short 39 / long
 - **c=1 在 λ=0.088 下按算术就过载,不是意外:** 平均服务时间 S̄ ≈ 15.3 s → 单流容量 ≈ 1/15.3 = 0.065 task/s < 0.088。c=2、c=4 的容量取决于 P_eff(未在插电后重测),E5 说明 c=4 在 λ ≈ 0.03–0.05 之间饱和。
 - **对 baseline 的含义:** 现行规则(`src/batch/baseline.py`)只算 ok Task 的 p99,并且在没有任何 c 可接受时回退到 goodput 最大者,这会把"拒掉 longctx 的 c=8"选出来。**这个 c=8 不应该当作 Fixed-concurrency baseline。** 在下面的问题解决前,baseline c 视为**未定**:① 在 λ ≈ 0.03–0.05 补测 E1(c=1/2/4 才有可能满足 p99 与 fail 率);② 规则里把 `error_ctx_exceeded` 单独当成不可接受(任何 c 只要有 ctx_exceeded 就不合格)。
 - **E1-U 与 E1-S c=8 的对比同样作废:** 上一条里「E1-U 比 E1-S c=8 差」是拿一个没有 longctx 的 c=8 比,不成立。E1-U(共享池)没有 2048 的单 slot 上限,longctx 会正常跑,应该和 E1-S 的 c=4(同样跑 longctx)比较:U c=4 fail 65% 对 S c=4 58.8%,U c=8 fail 76%。
+
+### 2026-11-01 #9 基线规则放宽(事后调整)并重算 baseline c
+**这是看过 E1–E5 数据之后改的规则,不是事先定的;报告里必须这样写。** 原规则(p99/deadline ≤ 1 且失败率 ≤ 5%)在现有数据上有两个问题:① 100 个 Task 的 p99 基本等于最慢的一两个,连不过载的 c=4、λ=0.029 也是 1.72 / 1.91 / 1.84(完成的 Task 里有 7–13 个超 deadline);② 没有 c 合格时回退到 goodput 最高者,选出了靠拒掉 longctx 的 c=8。
+- **新规则(`rule="relaxed"`,`src/batch/baseline.py`):** 任何出现 `error_ctx_exceeded` 的 c 不合格,回退时也不能选;其余只要求失败率均值 ≤ 10%;p99/deadline 只记录,不再是门槛。比较量、5% 并列取较小 c 不变。原规则保留为 `rule="strict"`,结果写进 `baseline_c.json` 的 `strict_rule_result`。
+- **重算(`scripts/recompute_baseline.py`,E1-S λ=0.088,12 个 Run,不重跑):** c=1 / 2 / 4 / 8 的 goodput 0.0049 / 0.0063 / 0.0149 / 0.0520,失败率 63.6% / 63.6% / 58.8% / 29.6%;c=8 的 `ctx_exceeded_rate` = 25.1%,被排除。**baseline c = 4,但 `acceptable=False`**:λ=0.088 下所有 c 都过载,c=4 是"没有拒绝任务的 c 里 goodput 最高"的回退选择。原规则仍给出 c=8。
+- **补充证据(不参与选择):** c=4、λ=0.029(E5)3 个 Run 在新规则下合格(失败率 3.4%,goodput 0.0253)。**c=1、2 没有在这个 λ 上测过**,所以不能说 c=4 是 λ=0.029 下的最优,只能说它合格。
+- **仍未解决:** 想在不过载的 λ 上正式比较 c=1/2/4,需要补测 E1(λ≈0.045,c∈{1,2,4},3 seed,≈6–7 h)。
+- 测试:`tests/test_batch_baseline.py` 旧用例改为 `rule="strict"`,新增 3 个 relaxed 用例;全量通过。

@@ -1,6 +1,7 @@
 {
- "c": 8,
+ "c": 4,
  "p99_acceptable": false,
+ "rule": "relaxed",
  "by_c": [
   {
    "c": 1,
@@ -8,6 +9,7 @@
    "goodput_per_s": 0.004895001523836041,
    "p99_deadline_ratio": 1.8202588310322037,
    "fail_rate": 0.6357388316151202,
+   "ctx_exceeded_rate": 0.0,
    "acceptable": false
   },
   {
@@ -16,6 +18,7 @@
    "goodput_per_s": 0.006299374533085903,
    "p99_deadline_ratio": 1.9041404791885432,
    "fail_rate": 0.6357388316151202,
+   "ctx_exceeded_rate": 0.0,
    "acceptable": false
   },
   {
@@ -24,6 +27,7 @@
    "goodput_per_s": 0.014902012322843718,
    "p99_deadline_ratio": 1.9105316045833485,
    "fail_rate": 0.5876288659793815,
+   "ctx_exceeded_rate": 0.0,
    "acceptable": false
   },
   {
@@ -32,11 +36,71 @@
    "goodput_per_s": 0.05195383214951862,
    "p99_deadline_ratio": 1.3959038823529697,
    "fail_rate": 0.29553264604810997,
+   "ctx_exceeded_rate": 0.2508591065292096,
    "acceptable": false
   }
  ],
  "experiment": "E1-S",
+ "lambda": 0.088,
  "n_runs": 12,
  "complete": true,
- "rule": "see src/batch/baseline.py"
+ "strict_rule_result": {
+  "c": 8,
+  "p99_acceptable": false,
+  "rule": "strict",
+  "by_c": [
+   {
+    "c": 1,
+    "n_runs": 3,
+    "goodput_per_s": 0.004895001523836041,
+    "p99_deadline_ratio": 1.8202588310322037,
+    "fail_rate": 0.6357388316151202,
+    "ctx_exceeded_rate": 0.0,
+    "acceptable": false
+   },
+   {
+    "c": 2,
+    "n_runs": 3,
+    "goodput_per_s": 0.006299374533085903,
+    "p99_deadline_ratio": 1.9041404791885432,
+    "fail_rate": 0.6357388316151202,
+    "ctx_exceeded_rate": 0.0,
+    "acceptable": false
+   },
+   {
+    "c": 4,
+    "n_runs": 3,
+    "goodput_per_s": 0.014902012322843718,
+    "p99_deadline_ratio": 1.9105316045833485,
+    "fail_rate": 0.5876288659793815,
+    "ctx_exceeded_rate": 0.0,
+    "acceptable": false
+   },
+   {
+    "c": 8,
+    "n_runs": 3,
+    "goodput_per_s": 0.05195383214951862,
+    "p99_deadline_ratio": 1.3959038823529697,
+    "fail_rate": 0.29553264604810997,
+    "ctx_exceeded_rate": 0.2508591065292096,
+    "acceptable": false
+   }
+  ]
+ },
+ "supplementary_c4_lambda_0.029": {
+  "c": 4,
+  "p99_acceptable": true,
+  "rule": "relaxed",
+  "by_c": [
+   {
+    "c": 4,
+    "n_runs": 3,
+    "goodput_per_s": 0.025264727827544048,
+    "p99_deadline_ratio": 1.8222860234651626,
+    "fail_rate": 0.034364261168384876,
+    "ctx_exceeded_rate": 0.0,
+    "acceptable": true
+   }
+  ]
+ }
 }

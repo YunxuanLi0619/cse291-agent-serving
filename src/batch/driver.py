@@ -282,7 +282,7 @@ class Batch:
         expected = {c: self.cfg["reps"] for c in self.cfg["e1_concurrency"]}
         have = {c: sum(r["c"] == c for r in rows) for c in expected}
         result = select_baseline(rows) | {"experiment": "E1-S", "n_runs": len(rows), "complete": have == expected,
-                                          "rule": "see src/batch/baseline.py"}
+                                          "strict_rule_result": select_baseline(rows, rule="strict")}
         if not result["complete"]:
             self.log(f"WARNING: E1-S is incomplete ({have}, expected {expected}); the baseline c is provisional")
         (self.work / "baseline_c.json").write_text(json.dumps(result, indent=1))
@@ -303,7 +303,7 @@ class Batch:
     def _e1_rows(self, stage: Stage) -> list[dict]:
         from src.analysis.metrics import run_metrics
         from src.analysis.runs import load_run
-        from .baseline import p99_deadline_ratio
+        from .baseline import ctx_exceeded_rate, p99_deadline_ratio
         rows = []
         for spec in stage.runs:
             d = self.raw / spec.name
@@ -313,7 +313,8 @@ class Batch:
             rows.append({"c": spec.c, "seed": spec.seed, "run": spec.name,
                          "goodput_per_s": run_metrics(run.tasks)["goodput_per_s"],
                          "p99_deadline_ratio": p99_deadline_ratio(run.tasks),
-                         "fail_rate": run_metrics(run.tasks)["fail_rate"]})
+                         "fail_rate": run_metrics(run.tasks)["fail_rate"],
+                         "ctx_exceeded_rate": ctx_exceeded_rate(run.tasks)})
         return rows
 
 
